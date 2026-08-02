@@ -5,6 +5,7 @@ import { ChevronDown, ArrowUp, ArrowDown } from "lucide-react";
 
 interface Props {
   value: number;
+  modified?: boolean;
   onChange: (value: number) => void;
 }
 
@@ -13,7 +14,7 @@ const OPTIONS = [
   { label: "DOWN", value: 1, icon: ArrowDown },
 ];
 
-export default function DirectionDropdown({ value, onChange }: Props) {
+export default function DirectionDropdown({ value, modified = false, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -49,7 +50,7 @@ export default function DirectionDropdown({ value, onChange }: Props) {
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="
+        className={`
           flex
           h-11
           w-full
@@ -58,8 +59,7 @@ export default function DirectionDropdown({ value, onChange }: Props) {
           gap-3
           rounded-lg
           border
-          border-white/10
-          bg-black/40
+          ${modified ? "border-yellow-400/70 bg-yellow-500/10" : "border-white/10 bg-black/40"}
           px-4
           text-sm
           text-white
@@ -70,7 +70,7 @@ export default function DirectionDropdown({ value, onChange }: Props) {
           focus:border-emerald-400
           focus:ring-1
           focus:ring-emerald-400
-        "
+        `}
       >
         <span className="flex items-center gap-2 font-medium tracking-wide">
           <SelectedIcon size={15} className="text-emerald-400" />

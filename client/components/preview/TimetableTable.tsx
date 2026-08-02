@@ -1,18 +1,12 @@
 "use client";
 
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import type { RootState } from "@/store";
+import type { TimetableRow } from "@/store/previewSlice";
 import { updatePreview } from "@/store/previewSlice";
+import { toast } from "sonner";
 import EditableCell from "./EditableCell";
 import DirectionDropdown from "./DirectionDropdown";
-
-interface TimetableRow {
-  trainId: string;
-  sourceStation: string;
-  destinationStation: string;
-  direction: number;
-  startTime: string;
-  endTime: string;
-}
 
 interface Props {
   preview: {
@@ -25,24 +19,70 @@ interface Props {
 
 export default function TimetableTable({ preview }: Props) {
   const dispatch = useDispatch();
+  const originalTimetable = useSelector((state: RootState) => state.preview.originalData?.timetable ?? []);
 
-  const updateCell = (rowIndex: number, field: keyof TimetableRow, value: string) => {
-    const updatedTimetable = preview.timetable.map((row, index) =>
-      index === rowIndex
-        ? {
-            ...row,
-            [field]: field === "direction" ? (value === "UP" ? 0 : 1) : value,
-          }
-        : row,
-    );
+  const hasRowChanged = (row: TimetableRow, originalRow?: TimetableRow): boolean => {
+    if (!originalRow) {
+      return true;
+    }
 
-    dispatch(
-      updatePreview({
-        ...preview,
-        timetable: updatedTimetable,
-      }),
+    return (
+      row.trainId !== originalRow.trainId ||
+      row.sourceStation !== originalRow.sourceStation ||
+      row.destinationStation !== originalRow.destinationStation ||
+      row.direction !== originalRow.direction ||
+      row.startTime !== originalRow.startTime ||
+      row.endTime !== originalRow.endTime
     );
   };
+
+  const updateCell = (rowIndex: number, field: keyof TimetableRow, value: string) => {
+
+  if (field === "trainId") {
+    const nextTrainId = value.trim().toLowerCase();
+
+    const hasConflict = preview.timetable.some((row, index) => {
+      return index !== rowIndex && row.trainId.trim().toLowerCase() === nextTrainId;
+    });
+
+    if (hasConflict) {
+      toast.error("Train ID must be unique");
+      return;
+    }
+  }
+
+  const updatedTimetable = preview.timetable.map((row, index) => {
+    if (index !== rowIndex) {
+      return row;
+    }
+
+    const newValue =
+      field === "direction"
+        ? value === "UP"
+          ? 0
+          : 1
+        : value;
+
+    const updatedRow = {
+      ...row,
+      [field]: newValue,
+    };
+
+    const originalRow = originalTimetable[index];
+
+    return {
+      ...updatedRow,
+      changed: hasRowChanged(updatedRow, originalRow),
+    };
+  });
+
+  dispatch(
+    updatePreview({
+      ...preview,
+      timetable: updatedTimetable,
+    })
+  );
+};
 
   return (
     <div
@@ -89,7 +129,7 @@ export default function TimetableTable({ preview }: Props) {
           <tbody>
             {preview.timetable.map((row, index) => (
               <tr
-                key={row.trainId}
+                key={`${row.trainId}-${index}`}
                 className="
                     border-t
                     border-white/10
@@ -98,30 +138,31 @@ export default function TimetableTable({ preview }: Props) {
                   "
               >
                 <td className="px-8 py-4 align-middle">
-                  <EditableCell value={row.trainId} onChange={(value) => updateCell(index, "trainId", value)} />
+                  <EditableCell value={row.trainId} modified={Boolean(row.changed)} onChange={(value) => updateCell(index, "trainId", value)} />
                 </td>
 
                 <td className="px-8 py-4 align-middle">
-                  <EditableCell value={row.sourceStation} onChange={(value) => updateCell(index, "sourceStation", value)} />
+                  <EditableCell value={row.sourceStation} modified={Boolean(row.changed)} onChange={(value) => updateCell(index, "sourceStation", value)} />
                 </td>
 
                 <td className="px-8 py-4 align-middle">
-                  <EditableCell value={row.destinationStation} onChange={(value) => updateCell(index, "destinationStation", value)} />
+                  <EditableCell value={row.destinationStation} modified={Boolean(row.changed)} onChange={(value) => updateCell(index, "destinationStation", value)} />
                 </td>
 
                 <td className="px-8 py-4 align-middle">
                   <DirectionDropdown
                     value={row.direction}
+                    modified={Boolean(row.changed)}
                     onChange={(value) => updateCell(index, "direction", value === 0 ? "UP" : "DOWN")}
                   />
                 </td>
 
                 <td className="px-8 py-4 align-middle">
-                  <EditableCell value={row.startTime} type="time" onChange={(value) => updateCell(index, "startTime", value)} />
+                  <EditableCell value={row.startTime} type="time" modified={Boolean(row.changed)} onChange={(value) => updateCell(index, "startTime", value)} />
                 </td>
 
                 <td className="px-8 py-4 align-middle">
-                  <EditableCell value={row.endTime} type="time" onChange={(value) => updateCell(index, "endTime", value)} />
+                  <EditableCell value={row.endTime} type="time" modified={Boolean(row.changed)} onChange={(value) => updateCell(index, "endTime", value)} />
                 </td>
               </tr>
             ))}

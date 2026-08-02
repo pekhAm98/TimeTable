@@ -1,7 +1,7 @@
 "use client";
 
-import { TrainFront, CalendarDays, FileSpreadsheet } from "lucide-react";
-
+import { TrainFront, CalendarDays, FileSpreadsheet, Save, UploadCloud } from "lucide-react";
+import {useSelector} from "react-redux";
 const LINE_LABELS: Record<number, string> = {
   1: "Blue Line",
   2: "Green Line",
@@ -30,6 +30,8 @@ export default function PreviewHeader({
   runDayType,
   totalTrains,
 }: Props) {
+  const isDirty = useSelector((state: any) => state.preview.isDirty);
+
   return (
     <div
       className="
@@ -68,6 +70,64 @@ export default function PreviewHeader({
             Timetable Preview
           </p>
         </div>
+
+        {isDirty ? (
+          <div className="ml-auto flex items-center gap-3 self-center">
+            <button
+              type="button"
+              className="
+                inline-flex
+                h-10
+                items-center
+                justify-center
+                gap-2
+                rounded-xl
+                border border-emerald-400/40
+                bg-emerald-500/10
+                px-5
+                text-sm
+                leading-none
+                font-semibold
+                text-emerald-300
+                transition
+                hover:bg-emerald-500/20
+                focus:outline-none
+                focus:ring-2
+                focus:ring-emerald-400
+              "
+            >
+              <Save size={16} className="shrink-0" />
+              Save
+            </button>
+
+            <button
+              type="button"
+              className="
+                inline-flex
+                h-10
+                items-center
+                justify-center
+                gap-2
+                rounded-xl
+                border border-cyan-400/40
+                bg-cyan-500/10
+                px-5
+                text-sm
+                leading-none
+                font-semibold
+                text-cyan-200
+                transition
+                hover:bg-cyan-500/20
+                focus:outline-none
+                focus:ring-2
+                focus:ring-cyan-300
+              "
+            >
+              <UploadCloud size={16} className="shrink-0" />
+              Upload
+            </button>
+          </div>
+        ) : null}
 
       </div>
 

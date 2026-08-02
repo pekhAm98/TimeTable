@@ -13,6 +13,9 @@ export default function EditableCell({
   modified = false,
   onChange,
 }: Props) {
+
+  
+
   return (
     <input
       type={type}

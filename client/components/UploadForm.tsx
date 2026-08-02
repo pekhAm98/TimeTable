@@ -1,6 +1,6 @@
 "use client";
 import { useDispatch } from "react-redux";
-import { setPreview } from "../store/previewSlice";
+import {  setPreviewData, setPreviewSource } from "../store/previewSlice";
 import { useDropzone } from "react-dropzone";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -98,7 +98,8 @@ export default function UploadForm() {
       //store the preview in redux
       //store the preview in redux
       
-      dispatch(setPreview(result.data));
+      dispatch(setPreviewData(result.data));
+      dispatch(setPreviewSource("UPLOAD"));
 
       router.push("/preview");
     } catch (error) {

@@ -1,12 +1,13 @@
 "use client";
 import {  toast } from "sonner";
-import { TrainFront, CalendarDays, FileSpreadsheet, Save, UploadCloud } from "lucide-react";
+import { TrainFront, CalendarDays, FileSpreadsheet, Save, UploadCloud, Home } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import UnsavedChangesAlertModal from "./UnsavedChangesAlertModal";
-import { usePatchPreviewByIdMutation, useSaveConfirmedPreviewMutation } from "@/store/api/timetableApi";
+import { usePatchPreviewByIdMutation, useSaveConfirmedPreviewMutation, usePublishPreviewMutation } from "@/store/api/timetableApi";
 import { createPortal } from "react-dom";
 import { setPreviewData } from "@/store/previewSlice";
+import { useRouter } from "next/navigation";
 const LINE_LABELS: Record<number, string> = {
   1: "Blue Line",
   2: "Green Line",
@@ -29,58 +30,163 @@ interface Props {
   totalTrains: number;
 }
 
+type ApiErrorShape = {
+  data?: {
+    message?: string;
+    errors?: Array<{ row?: number; field?: string; message?: string }>;
+  };
+  error?: string;
+};
+
+function getApiErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  const apiError = error as ApiErrorShape;
+
+  const firstValidationError = apiError?.data?.errors?.[0];
+
+  if (firstValidationError?.message) {
+    const rowText = firstValidationError.row && firstValidationError.row > 0 ? `Row ${firstValidationError.row}: ` : "";
+    return `${rowText}${firstValidationError.message}`;
+  }
+
+  if (apiError?.data?.message) {
+    return apiError.data.message;
+  }
+
+  if (apiError?.error) {
+    return apiError.error;
+  }
+
+  return "Failed to save draft. Backend may be unavailable.";
+}
+
 export default function PreviewHeader({ uploadName, lineId, runDayType, totalTrains }: Props) {
+  const router = useRouter();
   const isDirty = useSelector((state: any) => state.preview.isDirty);
   const [showModal, setShowModal] = useState(false);
   const [patchPreviewById] = usePatchPreviewByIdMutation();
   const [saveConfirmedPreview] = useSaveConfirmedPreviewMutation();
+  const [publishPreview, { isLoading: isPublishing }] = usePublishPreviewMutation();
   const preview = useSelector((state: any) => state.preview);
+  const canPublish = Number(preview?.data?.previewId ?? 0) > 0;
   const dispatch = useDispatch();
   ///SAVE DRAFT
   const handleSaveDraft = async () => {
-    if (!preview.data) {
+    const activePreview = preview.data;
+    const effectiveUploadName = String(activePreview?.uploadName ?? uploadName ?? "").trim();
+    const effectiveTimetable = Array.isArray(activePreview?.timetable) ? activePreview.timetable : [];
+    const firstRowMeta = effectiveTimetable.length > 0 ? (effectiveTimetable[0] as { lineId?: number; runDayType?: number }) : undefined;
+    const effectiveLineId = Number(activePreview?.lineId ?? lineId ?? firstRowMeta?.lineId ?? 0);
+    const effectiveRunDayType = Number(activePreview?.runDayType ?? runDayType ?? firstRowMeta?.runDayType ?? 0);
+
+    if (!activePreview) {
       console.error("No preview data to save");
       return;
     }
 
-    if (preview.previewId) {
+    if (!effectiveUploadName) {
+      console.error("save draft -> uploadName missing", { activePreview, uploadName, lineId, runDayType });
+      toast.error("Upload name is missing for this preview", { id: "save-draft" });
+      return;
+    }
+
+    if (!effectiveLineId || ![1, 2, 3, 4, 5, 6].includes(effectiveLineId)) {
+      console.error("save draft -> lineId missing/invalid", { activePreview, lineId, firstRowMeta });
+      toast.error("Line ID is missing for this preview", { id: "save-draft" });
+      return;
+    }
+
+    if (![1, 2, 4].includes(effectiveRunDayType)) {
+      console.error("save draft -> runDayType missing/invalid", { activePreview, runDayType, firstRowMeta });
+      toast.error("Run day type is missing for this preview", { id: "save-draft" });
+      return;
+    }
+
+    console.log("save draft -> active preview:", activePreview);
+
+    toast.loading("Saving draft...", {
+      id: "save-draft",
+    });
+
+    if (activePreview.previewId) {
       try {
-        const formData = new FormData();
-        formData.append("uploadName", preview.data.uploadName);
-        formData.append("lineId", preview.data.lineId.toString());
-        formData.append("runDayType", preview.data.runDayType.toString());
-        formData.append("updatedPreview", JSON.stringify(preview.data.timetable));
-        const response = await patchPreviewById({ id: preview.previewId, data: formData });
-        dispatch(setPreviewData({ ...preview.data, isDirty: false, previewId: response.data.id }));
-        if ('error' in response) {
-          toast.error("Failed to save draft");
-          return;
+        const payload = {
+          uploadName: effectiveUploadName,
+          lineId: effectiveLineId,
+          runDayType: effectiveRunDayType,
+          timetable: effectiveTimetable,
+        };
+
+        const response = await patchPreviewById({ id: activePreview.previewId, data: payload }).unwrap();
+
+        if (!response?.success) {
+          throw new Error(response?.message ?? "Failed to save draft");
         }
+
+        dispatch(setPreviewData(activePreview));
+        toast.success("Draft saved successfully", {
+          id: "save-draft",
+        });
+        router.push("/");
       } catch (error) {
-        console.error("Failed to save draft:", error);
+        toast.error(getApiErrorMessage(error), {
+          id: "save-draft",
+        });
       }
     } else {
       try {
         const payload = {
-          uploadName: preview.data.uploadName,
-          lineId: preview.data.lineId,
-          runDayType: preview.data.runDayType,
-          timetable: preview.data.timetable,
+          uploadName: effectiveUploadName,
+          lineId: effectiveLineId,
+          runDayType: effectiveRunDayType,
+          timetable: effectiveTimetable,
         };
 
-        const response = await saveConfirmedPreview(payload);
-        if ('error' in response) {
-          toast.error("Failed to save draft");
-          return;
+        const response = await saveConfirmedPreview(payload).unwrap();
+
+        if (!response?.success) {
+          throw new Error(response?.message ?? "Failed to save draft");
         }
 
-        dispatch(setPreviewData(preview.data));
-        toast.success("Draft saved successfully");
+        dispatch(setPreviewData(activePreview));
+        toast.success("Draft saved successfully", {
+          id: "save-draft",
+        });
+        router.push("/");
       } catch (error) {
-        toast.error("Failed to save draft");
+        toast.error(getApiErrorMessage(error), {
+          id: "save-draft",
+        });
       }
     }
 
+  };
+
+  const handlePublish = async () => {
+    const previewId = Number(preview?.data?.previewId ?? 0);
+
+    if (!previewId) {
+      toast.error("Save draft first before publishing", { id: "publish-preview" });
+      return;
+    }
+
+    toast.loading("Publishing timetable...", { id: "publish-preview" });
+
+    try {
+      const response = await publishPreview(previewId).unwrap();
+
+      if (!response?.success) {
+        throw new Error(response?.message ?? "Failed to publish preview");
+      }
+
+      toast.success(response?.message ?? "Published successfully", { id: "publish-preview" });
+      router.push("/");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error), { id: "publish-preview" });
+    }
   };
 
   return (
@@ -130,6 +236,31 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
         </div>
 
         <div className="ml-auto flex items-center gap-3 self-center">
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className="
+              inline-flex
+              h-10
+              items-center
+              justify-center
+              gap-2
+              rounded-xl
+              border border-white/10
+              bg-white/5
+              px-5
+              text-sm
+              font-semibold
+              text-slate-200
+              transition
+              hover:bg-white/10
+              hover:shadow-[0_0_20px_rgba(255,255,255,0.08)]
+            "
+          >
+            <Home size={16} />
+            Home
+          </button>
+
          <button
   type="button"
   onClick={handleSaveDraft}
@@ -157,6 +288,8 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
 
           <button
             type="button"
+            onClick={handlePublish}
+            disabled={isPublishing || !canPublish}
             className="
       inline-flex
       h-10
@@ -174,10 +307,16 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
       transition
       hover:bg-cyan-500/20
       hover:shadow-[0_0_20px_rgba(34,211,238,0.35)]
+      disabled:border-cyan-400/20
+      disabled:bg-cyan-500/5
+      disabled:text-cyan-200/50
+      disabled:cursor-not-allowed
+      disabled:opacity-70
     "
+        title={canPublish ? "Publish preview" : "Save draft first to enable publish"}
           >
             <UploadCloud size={16} />
-            Publish
+        {isPublishing ? "Publishing..." : "Publish"}
           </button>
         </div>
       </div>

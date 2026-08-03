@@ -8,7 +8,7 @@ import { UploadCloud, FileSpreadsheet, TrainFront, CalendarDays } from "lucide-r
 import { METRO_LINES, RUN_DAY_TYPES } from "@/utils/maps";
 import { useState } from "react";
 import { setLineId, setUploadName, setRunDayType } from "@/store/uploadSelectionSlice";
-import { useGetUploadedPreviewMutation, usePatchPreviewByIdMutation } from "@/store/api/timetableApi";
+import { useGetUploadedPreviewMutation } from "@/store/api/timetableApi";
 
 type UploadForm = {
   name: string;
@@ -16,6 +16,32 @@ type UploadForm = {
   day: number;
   file: File | null;
 };
+
+type ApiErrorShape = {
+  data?: {
+    message?: string;
+  };
+  error?: string;
+};
+
+function getApiErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  const apiError = error as ApiErrorShape;
+
+  if (apiError?.data?.message) {
+    return apiError.data.message;
+  }
+
+  if (apiError?.error) {
+    return apiError.error;
+  }
+
+  return "Upload failed. Backend may be unavailable.";
+}
+
 export default function UploadForm() {
   const router = useRouter();
   const dispatch = useDispatch();
@@ -80,10 +106,11 @@ export default function UploadForm() {
       toast.loading("Uploading timetable...", {
         id: "upload",
       });
-      let result;
-      
-        result = await getUploadedPreview(data).unwrap();
-      
+      const result = await getUploadedPreview(data).unwrap();
+
+      if (!result?.success || !result?.data) {
+        throw new Error("Upload failed. Server did not return preview data.");
+      }
 
       toast.success("Timetable preview generated", {
         id: "upload",
@@ -99,7 +126,7 @@ export default function UploadForm() {
 
       router.push("/preview");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Upload failed", {
+      toast.error(getApiErrorMessage(error), {
         id: "upload",
       });
     }

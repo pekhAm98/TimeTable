@@ -51,3 +51,14 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(16, 185, 129, 0.8);
 }
+
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px rgba(15, 23, 42, 0.55) inset !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: white !important;
+  transition: background-color 9999s ease-in-out 0s;
+}

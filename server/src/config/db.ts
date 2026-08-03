@@ -22,6 +22,22 @@ export async function connectDB() {
   }
 }
 
+export async function closeDBPool() {
+  try {
+    const pool = oracledb.getPool("metro");
+    await pool.close(10);
+    console.log("✅ Oracle pool closed");
+  } catch (err) {
+    // NJS-047 means no active pool exists for the alias.
+    if (err instanceof Error && err.message.includes("NJS-047")) {
+      return;
+    }
+
+    console.error("❌ Failed to close Oracle pool");
+    console.error(err);
+  }
+}
+
 export function getConnection() {
   return oracledb.getConnection("metro");
 }

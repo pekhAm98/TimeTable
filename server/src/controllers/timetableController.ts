@@ -100,7 +100,7 @@ export const getPreviews = async (req: Request, res: Response) => {
     created_by,
     created_at
 FROM timetable_upload
-ORDER BY created_at DESC;
+ORDER BY created_at DESC
   `,
   [],
   {

@@ -22,13 +22,13 @@ interface PreviewState {
   originalData: PreviewData | null;
   isDirty: boolean;
   source: "UPLOAD" | "HISTORY";
-  originalUploadId?: number;
+  uploadId?: number;
 }
 const initialState: PreviewState = {
   data: null,
   originalData: null,
   source: "UPLOAD",
-  originalUploadId: undefined,
+  uploadId: undefined,
   isDirty: false,
 };
 
@@ -66,6 +66,8 @@ const previewSlice = createSlice({
       state.originalData = null;
       state.isDirty = false;
     },
+
+    cleanState(state) {state.isDirty = false;},
   },
 });
 

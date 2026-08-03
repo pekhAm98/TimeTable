@@ -1,27 +1,28 @@
 "use client";
-import { useDispatch } from "react-redux";
-import {  setPreviewData, setPreviewSource } from "../store/previewSlice";
+import { useDispatch, useSelector } from "react-redux";
+import { setPreviewData, setPreviewSource } from "../store/previewSlice";
 import { useDropzone } from "react-dropzone";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { UploadCloud, FileSpreadsheet, TrainFront, CalendarDays } from "lucide-react";
+import { METRO_LINES, RUN_DAY_TYPES } from "@/utils/maps";
 import { useState } from "react";
+import { setLineId, setUploadName, setRunDayType } from "@/store/uploadSelectionSlice";
+import { useGetUploadedPreviewMutation, usePatchPreviewByIdMutation } from "@/store/api/timetableApi";
+
 type UploadForm = {
   name: string;
-  line: string;
-  day: string;
+  line: number;
+  day: number;
   file: File | null;
 };
 export default function UploadForm() {
   const router = useRouter();
   const dispatch = useDispatch();
-  const [formData, setFormData] = useState<UploadForm>({
-    name: "",
-    line: "",
-    day: "",
-    file: null,
-  });
+  const uploadSelection = useSelector((state: any) => state.uploadSelection);
+  const [file, setFile] = useState<File | null>(null);
 
+  
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     accept: {
       "text/csv": [".csv"],
@@ -34,31 +35,33 @@ export default function UploadForm() {
       const file = acceptedFiles[0];
 
       if (file) {
-        setFormData((prev) => ({ ...prev, file }));
+        setFile(file);
       }
     },
     onDropRejected: () => {
       toast.error("Only CSV files are allowed");
     },
   });
+  const [getUploadedPreview] = useGetUploadedPreviewMutation();
+  
   //UPLOAD
   const handleUpload = async () => {
-    if (!formData.name) {
+    if (!uploadSelection.uploadName) {
       toast.error("Upload name is required");
       return;
     }
 
-    if (!formData.line) {
+    if (!uploadSelection.lineId) {
       toast.error("Please select a line");
       return;
     }
 
-    if (!formData.day) {
+    if (!uploadSelection.runDayType) {
       toast.error("Please select run day");
       return;
     }
 
-    if (!formData.file) {
+    if (!file) {
       toast.error("CSV file is required");
       return;
     }
@@ -66,28 +69,21 @@ export default function UploadForm() {
     try {
       const data = new FormData();
 
-      data.append("file", formData.file);
+      data.append("file", file);
 
-      data.append("uploadName", formData.name);
+      data.append("uploadName", uploadSelection.uploadName);
 
-      data.append("lineId", formData.line);
+      data.append("lineId", uploadSelection.lineId.toString());
 
-      data.append("runDayType", formData.day);
+      data.append("runDayType", uploadSelection.runDayType.toString());
 
       toast.loading("Uploading timetable...", {
         id: "upload",
       });
-
-      const response = await fetch(process.env.NEXT_PUBLIC_API_URL + "/api/timetables/preview", {
-        method: "POST",
-        body: data,
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message);
-      }
+      let result;
+      
+        result = await getUploadedPreview(data).unwrap();
+      
 
       toast.success("Timetable preview generated", {
         id: "upload",
@@ -97,7 +93,7 @@ export default function UploadForm() {
       console.log(result);
       //store the preview in redux
       //store the preview in redux
-      
+
       dispatch(setPreviewData(result.data));
       dispatch(setPreviewSource("UPLOAD"));
 
@@ -161,7 +157,8 @@ export default function UploadForm() {
 
             <input
               placeholder="Enter upload name"
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              value={uploadSelection.uploadName}
+              onChange={(e) => dispatch(setUploadName(e.target.value))}
               className="
                 w-full
                 bg-transparent
@@ -190,8 +187,8 @@ export default function UploadForm() {
             <TrainFront size={20} className="text-emerald-400" />
 
             <select
-              value={formData.line}
-              onChange={(e) => setFormData({ ...formData, line: e.target.value })}
+              value={uploadSelection.lineId ?? ""}
+              onChange={(e) => dispatch(setLineId(Number(e.target.value)))}
               className="
             w-full
             bg-transparent
@@ -204,29 +201,11 @@ export default function UploadForm() {
                 Select Line
               </option>
 
-              <option value="Yellow Line" className="bg-slate-900">
-                Yellow Line
-              </option>
-
-              <option value="Blue Line" className="bg-slate-900">
-                Blue Line
-              </option>
-
-              <option value="Pink Line" className="bg-slate-900">
-                Pink Line
-              </option>
-
-              <option value="Purple Line" className="bg-slate-900">
-                Purple Line
-              </option>
-
-              <option value="Orange Line" className="bg-slate-900">
-                Orange Line
-              </option>
-
-              <option value="Green Line" className="bg-slate-900">
-                Green Line
-              </option>
+              {METRO_LINES.map((line) => (
+                <option key={line.id} value={line.id} className="bg-slate-900">
+                  {line.name}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -247,8 +226,8 @@ export default function UploadForm() {
             <CalendarDays size={20} className="text-emerald-400" />
 
             <select
-              value={formData.day}
-              onChange={(e) => setFormData({ ...formData, day: e.target.value })}
+              value={uploadSelection.runDayType ?? ""}
+              onChange={(e) => dispatch(setRunDayType(Number(e.target.value)))}
               className="
                 w-full
                 bg-transparent
@@ -260,15 +239,11 @@ export default function UploadForm() {
               <option value={""} className="bg-slate-900">
                 Select Day
               </option>
-              <option value="Weekday" className="bg-slate-900">
-                Weekday
-              </option>
-              <option value="Saturday" className="bg-slate-900">
-                Saturday
-              </option>
-              <option value="Sunday" className="bg-slate-900">
-                Sunday
-              </option>
+              {RUN_DAY_TYPES.map((day) => (
+                <option key={day.id} value={day.id} className="bg-slate-900">
+                  {day.name}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -291,7 +266,7 @@ export default function UploadForm() {
       hover:bg-emerald-500/10
     "
           >
-            {formData.file ? (
+            {file ? (
               <>
                 <FileSpreadsheet
                   size={40}
@@ -302,18 +277,15 @@ export default function UploadForm() {
             "
                 />
 
-                <p className="text-white">{formData.file.name}</p>
+                <p className="text-white">{file.name}</p>
 
-                <p className="mt-1 text-sm text-slate-400">{(formData.file.size / 1024).toFixed(2)} KB</p>
+                <p className="mt-1 text-sm text-slate-400">{(file.size / 1024).toFixed(2)} KB</p>
 
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setFormData({
-                      ...formData,
-                      file: null,
-                    });
+                    setFile(null);
                   }}
                   className="
               mt-3

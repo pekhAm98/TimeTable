@@ -1,21 +1,8 @@
+"use client";
+
 import { Clock3, FileSpreadsheet, ChevronRight, Search } from "lucide-react";
 
-const uploads = [
-  {
-    id: 1,
-    name: "Sunday Original",
-    line: "Yellow Line",
-    day: "Sunday",
-    date: "02 Aug 2026",
-  },
-  {
-    id: 2,
-    name: "Sunday Revised",
-    line: "Yellow Line",
-    day: "Sunday",
-    date: "03 Aug 2026",
-  },
-];
+import { useGetAllPreviewsQuery } from "@/store/api/timetableApi";
 
 export const LINE_COLORS: Record<string, string> = {
   "Yellow Line": "text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]",
@@ -32,6 +19,13 @@ export const LINE_COLORS: Record<string, string> = {
 };
 
 export default function UploadHistory() {
+  const {  data:previews, isLoading } = useGetAllPreviewsQuery();
+  const history = previews?.data.data || [];
+
+  if (isLoading) {
+    return <p className="flex justify-center items-center">Loading...</p>;
+  }
+
   return (
     <div
       className="
@@ -93,9 +87,9 @@ export default function UploadHistory() {
 
       {/* Upload List */}
       <div className="space-y-4">
-        {uploads.map((upload) => (
+        {history.map((upload) => (
           <button
-            key={upload.id}
+            key={upload.upload_id}
             className="
               group
               flex w-full
@@ -140,7 +134,7 @@ export default function UploadHistory() {
                     text-white
                   "
                 >
-                  {upload.name}
+                  {upload.upload_name}
                 </h3>
 
                 <p
@@ -149,11 +143,15 @@ export default function UploadHistory() {
                     text-slate-400
                   "
                 >
-                  <span className={LINE_COLORS[upload.line] ?? "text-slate-300"}>{upload.line}</span>
+                  <span className={LINE_COLORS[upload.line_id] ?? "text-slate-300"}>{upload.line_id}</span>
 
                   {" • "}
 
-                  {upload.day}
+                  {Number(upload.run_day_type) === 1
+                    ? "Weekday"
+                    : Number(upload.run_day_type) === 2
+                    ? "Saturday"
+                    : "Sunday"}
                 </p>
 
                 <p
@@ -162,7 +160,7 @@ export default function UploadHistory() {
                     text-slate-500
                   "
                 >
-                  {upload.date}
+                  {upload.created_at}
                 </p>
               </div>
             </div>

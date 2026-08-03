@@ -1,6 +1,8 @@
 
 import "./globals.css";
 import { ReduxProvider } from "./providers";
+
+
 export const metadata = {
   title: "Metro Timetable Manager",
 };

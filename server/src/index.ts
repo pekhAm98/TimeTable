@@ -13,6 +13,7 @@ await connectDB();
 app.use(express.json());
 app.use(cors());
 // Test the connection
+
 app.use("/api/timetables", timetableRoutes);
 
 

@@ -1,12 +1,15 @@
 "use client";
-
-import { Clock3, ChevronRight, FileSpreadsheet, Search, Trash2 } from "lucide-react";
-import { useDispatch } from "react-redux";
+import { useMemo } from "react";
+import { Clock3, ChevronRight, FileSpreadsheet, Search, Trash2} from "lucide-react";
 import { useRouter } from "next/navigation";
-
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDeletePreviewByIdMutation, useGetAllPreviewsQuery, useLazyGetPreviewByIdQuery } from "@/store/api/timetableApi";
 import { setPreviewData, setPreviewSource } from "@/store/previewSlice";
 import { toast } from "sonner";
+import { RUN_DAY_TYPES } from "../constants/maps";
+import { setFilterOptions } from "@/store/searchAndFilterSlice";
+import { useSelector, useDispatch } from "react-redux";
+//import { RootState } from "@reduxjs/toolkit/query/react";
 
 export const LINE_COLORS: Record<string, string> = {
   "Yellow Line": "text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]",
@@ -51,6 +54,35 @@ export default function UploadHistory() {
   const [deletePreviewById, { isLoading: isDeleting }] = useDeletePreviewByIdMutation();
   const { data: previews, isLoading } = useGetAllPreviewsQuery();
   const history = previews?.data || [];
+  const filterOptions = useSelector((state: any) => state.searchAndFilter.filterOptions);
+ 
+   const filteredHistory = useMemo(() => {
+    if (previews?.data) {
+      const filtered = previews.data.filter((upload) => {
+        const matchesSearch = filterOptions.searchQuery
+          ? upload.upload_name.toLowerCase().includes(filterOptions.searchQuery.toLowerCase())
+          : true;
+        const matchesLineId = filterOptions.lineId
+          ? upload.line_id === filterOptions.lineId
+          : true;
+        const matchesRunDayType = filterOptions.runDayType
+          ? upload.run_day_type === filterOptions.runDayType
+          : true;
+
+        return matchesSearch && matchesLineId && matchesRunDayType;
+      });
+      return filtered;
+    }
+    return [];
+  }, [previews?.data, filterOptions]) ?? [];
+  
+
+
+
+
+
+
+
 
   const handleUploadClick = async (upload: (typeof history)[number]) => {
     try {
@@ -60,9 +92,7 @@ export default function UploadHistory() {
 
       console.log("history click -> fetched preview detail:", result);
 
-      const firstRowMeta = Array.isArray(result?.data?.timetable) && result.data.timetable.length > 0
-        ? (result.data.timetable[0] as { lineId?: number; runDayType?: number })
-        : undefined;
+      const firstRowMeta = Array.isArray(result?.data?.timetable) && result.data.timetable.length > 0 ? (result.data.timetable[0] as { lineId?: number; runDayType?: number }) : undefined;
 
       const mergedPreview = {
         previewId: Number(result?.data?.previewId ?? upload.upload_id),
@@ -112,10 +142,7 @@ export default function UploadHistory() {
 
       toast.success(response?.message ?? "Preview deleted", { id: `delete-${upload.upload_id}` });
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to delete preview. Please try again.";
+      const message = error instanceof Error ? error.message : "Failed to delete preview. Please try again.";
 
       toast.error(message, { id: `delete-${upload.upload_id}` });
     }
@@ -136,15 +163,16 @@ export default function UploadHistory() {
         shadow-[0_0_40px_rgba(16,185,129,0.15)]
       "
     >
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6">
+        {/* Title */}
         <div className="flex items-center gap-3">
           <div
             className="
-              flex h-12 w-12 items-center justify-center
-              rounded-xl
-              bg-emerald-500/10
-              text-emerald-400
-            "
+        flex h-12 w-12 items-center justify-center
+        rounded-xl
+        bg-emerald-500/10
+        text-emerald-400
+      "
           >
             <Clock3 size={28} />
           </div>
@@ -156,34 +184,119 @@ export default function UploadHistory() {
           </div>
         </div>
 
-        <div
-          className="
-            flex items-center gap-2
-            rounded-xl
-            border border-white/10
-            bg-white/5
-            px-4
-          "
-        >
-          <Search size={18} className="text-slate-400" />
-
-          <input
-            placeholder="Search uploads..."
+        {/* Search */}
+        <div className="mt-6">
+          <div
             className="
-              w-40
-              bg-transparent
-              py-2
-              text-sm
-              text-white
-              outline-none
-              placeholder:text-slate-500
-            "
-          />
+        flex items-center gap-2
+        rounded-xl
+        border border-white/10
+        bg-white/5
+        px-4
+        transition
+        focus-within:border-emerald-400/40
+      "
+          >
+            <Search size={18} className="text-slate-400" />
+
+            <input
+              placeholder="Search uploads..."
+              className="
+          w-full
+          bg-transparent
+          py-3
+          text-sm
+          text-white
+          outline-none
+          placeholder:text-slate-500
+        "
+          onChange={(e) => dispatch(setFilterOptions({
+            ...filterOptions,
+            searchQuery: e.target.value,
+          }))}
+            />
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="mt-4 flex flex-wrap items-center gap-3 justify-end">
+          {/* LINE */}
+          <Select
+            value={filterOptions.lineId.toString()}
+            onValueChange={(value) =>
+              dispatch(
+                setFilterOptions({
+                  ...filterOptions,
+                  lineId: Number(value),
+                }),
+              )
+            }
+          >
+            <SelectTrigger className="w-[190px] border-white/10 bg-white/5">
+              <SelectValue>{LINE_LABELS[filterOptions.lineId] ?? "🚇 All Lines"}</SelectValue>
+            </SelectTrigger>
+
+            <SelectContent className="border-white/10 bg-zinc-950 text-slate-200">
+              <SelectItem value="0">🚇 All Lines</SelectItem>
+
+              {Object.entries(LINE_LABELS).map(([lineId, lineName]) => (
+                <SelectItem key={lineId} value={lineId}>
+                  {lineName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* RUN DAY */}
+          <Select
+            value={filterOptions.runDayType.toString()}
+            onValueChange={(value) =>
+              dispatch(
+                setFilterOptions({
+                  ...filterOptions,
+                  runDayType: Number(value),
+                }),
+              )
+            }
+          >
+            <SelectTrigger className="w-[180px] border-white/10 bg-white/5">
+              <SelectValue>{RUN_DAY_TYPES.find((x) => x.id === filterOptions.runDayType)?.name ?? "📅 All Days"}</SelectValue>
+            </SelectTrigger>
+
+            <SelectContent className="border-white/10 bg-zinc-950 text-slate-200">
+              <SelectItem value="0">📅 All Days</SelectItem>
+
+              {RUN_DAY_TYPES.map((dayType) => (
+                <SelectItem key={dayType.id} value={dayType.id.toString()}>
+                  {dayType.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <button
+            className="
+        rounded-xl
+        border border-red-400/20
+        bg-red-500/10
+        px-4
+        py-2
+        text-sm
+        text-red-300
+        transition
+        hover:bg-red-500/20
+      "
+            onClick={() => dispatch(setFilterOptions({ lineId: 0, runDayType: 0, searchQuery: "" }))}
+
+
+          >
+            Clear Filters
+          </button>
         </div>
       </div>
 
       <div className="space-y-4">
-        {history.map((upload) => {
+        {filteredHistory.map((upload) => {
           const lineName = LINE_LABELS[Number(upload.line_id)] ?? `Line ${upload.line_id}`;
 
           return (
@@ -201,12 +314,7 @@ export default function UploadHistory() {
                 hover:bg-emerald-500/10
               "
             >
-              <button
-                type="button"
-                className="flex flex-1 items-center justify-between rounded-lg p-2 text-left"
-                onClick={() => handleUploadClick(upload)}
-                disabled={isPreviewLoading || isDeleting}
-              >
+              <button type="button" className="flex flex-1 items-center justify-between rounded-lg p-2 text-left" onClick={() => handleUploadClick(upload)} disabled={isPreviewLoading || isDeleting}>
                 <div className="flex items-center gap-4">
                   <div
                     className="
@@ -228,11 +336,7 @@ export default function UploadHistory() {
 
                       {" • "}
 
-                      {Number(upload.run_day_type) === 1
-                        ? "Weekday"
-                        : Number(upload.run_day_type) === 2
-                          ? "Saturday"
-                          : "Sunday"}
+                      {Number(upload.run_day_type) === 1 ? "Weekday" : Number(upload.run_day_type) === 2 ? "Saturday" : "Sunday"}
                     </p>
 
                     <p className="text-sm font-bold text-slate-300">{formatCreatedAt(upload.created_at)}</p>

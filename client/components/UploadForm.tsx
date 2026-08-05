@@ -5,7 +5,7 @@ import { useDropzone } from "react-dropzone";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { UploadCloud, FileSpreadsheet, TrainFront, CalendarDays } from "lucide-react";
-import { METRO_LINES, RUN_DAY_TYPES } from "@/utils/maps";
+import { METRO_LINES, RUN_DAY_TYPES } from "@/constants/maps";
 import { useState } from "react";
 import { setLineId, setUploadName, setRunDayType } from "@/store/uploadSelectionSlice";
 import { useGetUploadedPreviewMutation } from "@/store/api/timetableApi";
@@ -186,6 +186,9 @@ export default function UploadForm() {
               placeholder="Enter upload name"
               value={uploadSelection.uploadName}
               onChange={(e) => dispatch(setUploadName(e.target.value))}
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
               className="
                 w-full
                 bg-transparent

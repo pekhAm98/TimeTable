@@ -61,6 +61,7 @@ export default function DirectionDropdown({ value, modified = false, onChange }:
           border
           ${modified ? "border-yellow-400/70 bg-yellow-500/10" : "border-white/10 bg-black/40"}
           px-4
+          pr-11
           text-sm
           text-white
           outline-none
@@ -79,7 +80,7 @@ export default function DirectionDropdown({ value, modified = false, onChange }:
 
         <ChevronDown
           size={16}
-          className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`ml-2 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
 

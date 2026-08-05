@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
+import { normalizeTimeToHmsOrThrow } from "../utils/timeFormat.js";
 
 const RUN_DAY_MAP: Record<string, number> = {
   WEEKDAY: 1,
@@ -339,13 +340,16 @@ function normalizeRows(rows: CsvRow[], request: PreviewRequest, firstDataRowNumb
 
     if (runDay !== request.runDayType) throw new Error(`Row ${rowNumber}: Uploaded file is for '${row["RUN DAY"]}', but '${request.runDayType}' was selected.`);
 
+    const normalizedStartTime = normalizeTimeToHmsOrThrow(startTime, "START TIME", rowNumber);
+    const normalizedEndTime = normalizeTimeToHmsOrThrow(endTime, "END TIME", rowNumber);
+
     return {
       trainId,
       sourceStation,
       destinationStation,
       direction,
-      startTime,
-      endTime,
+      startTime: normalizedStartTime,
+      endTime: normalizedEndTime,
       lineId: request.lineId,
       runDayType: request.runDayType,
     };

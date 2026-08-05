@@ -1,4 +1,5 @@
 import ALL_STATIONS from "../../constants/allStations.js";
+import { normalizeTimeToHmsOrThrow } from "../utils/timeFormat.js";
 export interface PreviewData {
   uploadName: string;
   lineId: number;
@@ -95,7 +96,7 @@ if(!preview.runDayType || ![1, 2, 4].includes(preview.runDayType)) {
     throw new Error(`Invalid run day type: ${preview.runDayType}`);
   }
 
-  return preview.timetable.map((row) => ({
+  return preview.timetable.map((row, index) => ({
     
     trainId: normalizeTrainId(
       row.trainId,
@@ -115,9 +116,9 @@ if(!preview.runDayType || ![1, 2, 4].includes(preview.runDayType)) {
       row.direction
     ),
 
-    startTime: row.startTime,
+    startTime: normalizeTimeToHmsOrThrow(row.startTime, "START TIME", index + 1),
 
-    endTime: row.endTime,
+    endTime: normalizeTimeToHmsOrThrow(row.endTime, "END TIME", index + 1),
 
     runDayType: preview.runDayType,
 

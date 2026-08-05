@@ -200,7 +200,10 @@ export const timetableApi = api.injectEndpoints({
         success: Boolean(response?.success),
         data: Array.isArray(response?.data) ? response.data.map(normalizePreviewSummary) : [],
       }),
-      providesTags: ["Preview"],
+      providesTags: (result) => {
+        const itemTags = (result?.data ?? []).map((item) => ({ type: "Preview" as const, id: item.upload_id }));
+        return [{ type: "Preview" as const, id: "LIST" }, ...itemTags];
+      },
     }),
     getPreviewById: builder.query<PreviewDetailResponse, number>({
       query: (id: number) => `/timetables/previews/${id}`,
@@ -242,7 +245,10 @@ export const timetableApi = api.injectEndpoints({
           console.error("[deletePreviewById] failed", { id, error });
         }
       },
-      invalidatesTags: (result, error, id) => [{ type: "Preview", id }],
+      invalidatesTags: (result, error, id) => [
+        { type: "Preview", id },
+        { type: "Preview", id: "LIST" },
+      ],
     }),
 
     publishPreview: builder.mutation<MutationBaseResponse, number>({

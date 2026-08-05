@@ -7,6 +7,7 @@ import { updatePreview } from "@/store/previewSlice";
 import { toast } from "sonner";
 import EditableCell from "./EditableCell";
 import DirectionDropdown from "./DirectionDropdown";
+import { normalizeTimeToHms } from "@/src/lib/time";
 
 interface Props {
   preview: {
@@ -61,7 +62,9 @@ export default function TimetableTable({ preview }: Props) {
         ? value === "UP"
           ? 0
           : 1
-        : value;
+        : field === "startTime" || field === "endTime"
+          ? normalizeTimeToHms(value) ?? value
+          : value;
 
     const updatedRow = {
       ...row,

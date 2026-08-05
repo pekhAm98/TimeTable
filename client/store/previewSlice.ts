@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { normalizeTimeToHms } from "@/src/lib/time";
 
 export interface TimetableRow {
   trainId: string;
@@ -32,6 +33,17 @@ const initialState: PreviewState = {
   isDirty: false,
 };
 
+function normalizeRowTimes<T extends TimetableRow>(row: T): T {
+  const normalizedStartTime = normalizeTimeToHms(row.startTime);
+  const normalizedEndTime = normalizeTimeToHms(row.endTime);
+
+  return {
+    ...row,
+    startTime: normalizedStartTime ?? row.startTime,
+    endTime: normalizedEndTime ?? row.endTime,
+  };
+}
+
 const previewSlice = createSlice({
   name: "preview",
 
@@ -42,7 +54,7 @@ const previewSlice = createSlice({
       const normalizedPayload: PreviewData = {
         ...action.payload,
         timetable: action.payload.timetable.map((row) => ({
-          ...row,
+          ...normalizeRowTimes(row),
           changed: false,
         })),
       };
@@ -57,8 +69,13 @@ const previewSlice = createSlice({
     },  
 
     updatePreview(state, action: PayloadAction<PreviewData>) {
-      state.data = action.payload;
-      state.isDirty = action.payload.timetable.some((row) => Boolean(row.changed));
+      const normalizedPayload: PreviewData = {
+        ...action.payload,
+        timetable: action.payload.timetable.map((row) => normalizeRowTimes(row)),
+      };
+
+      state.data = normalizedPayload;
+      state.isDirty = normalizedPayload.timetable.some((row) => Boolean(row.changed));
     },
 
     clearPreview(state) {

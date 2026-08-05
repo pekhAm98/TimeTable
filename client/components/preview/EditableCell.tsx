@@ -19,6 +19,7 @@ export default function EditableCell({
   return (
     <input
       type={type}
+      step={type === "time" ? 1 : undefined}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={`

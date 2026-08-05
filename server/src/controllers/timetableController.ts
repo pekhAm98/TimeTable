@@ -3,6 +3,7 @@ import { generatePreview } from "../services/timetable.service.js";
 import { getConnection } from "../config/db.js";
 import oracledb from "oracledb";
 import { transformAndValidateTimetable, type PreviewData } from "../services/transformTimetable.js";
+import { normalizeTimeToHmsOrThrow } from "../utils/timeFormat.js";
 
 async function resolveOracleValue(value: unknown): Promise<unknown> {
   if (value && typeof value === "object" && "getData" in value && typeof (value as { getData?: unknown }).getData === "function") {
@@ -38,7 +39,7 @@ function normalizeTimetableRows(raw: unknown): PreviewData["timetable"] {
     return [];
   }
 
-  return raw.map((item) => {
+  return raw.map((item, index) => {
     const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
 
     return {
@@ -46,8 +47,8 @@ function normalizeTimetableRows(raw: unknown): PreviewData["timetable"] {
       sourceStation: String(row.sourceStation ?? row.SOURCE_STATION ?? row.source_station ?? "").trim(),
       destinationStation: String(row.destinationStation ?? row.DESTINATION_STATION ?? row.destination_station ?? "").trim(),
       direction: Number(row.direction ?? row.DIRECTION ?? 0),
-      startTime: String(row.startTime ?? row.START_TIME ?? row.start_time ?? "").trim(),
-      endTime: String(row.endTime ?? row.END_TIME ?? row.end_time ?? "").trim(),
+      startTime: normalizeTimeToHmsOrThrow(row.startTime ?? row.START_TIME ?? row.start_time ?? "", "START TIME", index + 1),
+      endTime: normalizeTimeToHmsOrThrow(row.endTime ?? row.END_TIME ?? row.end_time ?? "", "END TIME", index + 1),
     };
   });
 }
@@ -144,7 +145,7 @@ export const saveConfirmedPreview = async (
       uploadName,
       lineId: Number(lineId),
       runDayType: Number(runDayType),
-      timetable: Array.isArray(timetable) ? timetable : [],
+      timetable: normalizeTimetableRows(timetable),
     };
 
     connection = await getConnection();
@@ -258,6 +259,7 @@ export const getPreviewById = async (req: Request, res: Response) => {
         return [];
       }
     })();
+    const normalizedTimetable = normalizeTimetableRows(parsedTimetable);
 
     console.log("getPreviewById -> fetched row:", {
       previewId,
@@ -273,7 +275,7 @@ export const getPreviewById = async (req: Request, res: Response) => {
         uploadName,
         lineId,
         runDayType,
-        timetable: parsedTimetable,
+        timetable: normalizedTimetable,
         created_by: String(row.created_by ?? row.CREATED_BY ?? ""),
         created_at: String(row.created_at ?? row.CREATED_AT ?? ""),
       },
@@ -305,7 +307,7 @@ export const patchPreviewById = async (req: Request, res: Response) => {
       uploadName,
       lineId: Number(lineId),
       runDayType: Number(runDayType),
-      timetable: Array.isArray(timetable) ? timetable : [],
+      timetable: normalizeTimetableRows(timetable),
     };
 
     connection = await getConnection();

@@ -1,14 +1,18 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config();
 import oracledb from "oracledb";
 
 async function main() {
+
+
+  console.log(process.env.ORACLE_CONNECTION_STRING);
   let connection;
 
   try {
     connection = await oracledb.getConnection({
       user: process.env.ORACLE_USER,
       password: process.env.ORACLE_PASSWORD,
-      connectString: process.env.ORACLE_CONNECT_STRING,
+      connectString: process.env.ORACLE_CONNECTION_STRING,
     });
 
     await connection.execute(`

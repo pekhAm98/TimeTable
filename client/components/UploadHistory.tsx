@@ -54,27 +54,32 @@ export default function UploadHistory() {
   const [deletePreviewById, { isLoading: isDeleting }] = useDeletePreviewByIdMutation();
   const { data: previews, isLoading } = useGetAllPreviewsQuery();
   const history = previews?.data || [];
-  const filterOptions = useSelector((state: any) => state.searchAndFilter.filterOptions);
- 
-   const filteredHistory = useMemo(() => {
-    if (previews?.data) {
-      const filtered = previews.data.filter((upload) => {
-        const matchesSearch = filterOptions.searchQuery
-          ? upload.upload_name.toLowerCase().includes(filterOptions.searchQuery.toLowerCase())
-          : true;
-        const matchesLineId = filterOptions.lineId
-          ? upload.line_id === filterOptions.lineId
-          : true;
-        const matchesRunDayType = filterOptions.runDayType
-          ? upload.run_day_type === filterOptions.runDayType
-          : true;
-
-        return matchesSearch && matchesLineId && matchesRunDayType;
-      });
-      return filtered;
+  const searchAndFilter = useSelector(
+  (state: any) => state.searchAndFilter
+);
+  const filteredHistory = useMemo(() => {
+    if (!previews?.data) {
+      return [];
     }
-    return [];
-  }, [previews?.data, filterOptions]) ?? [];
+
+    const normalizedSearchQuery = String(searchAndFilter.filterOptions.searchQuery ?? "").trim().toLowerCase();
+    const normalizedLineId = Number(searchAndFilter.filterOptions.lineId ?? 0);
+    const normalizedRunDayType = Number(searchAndFilter.filterOptions.runDayType ?? 0);
+
+    return previews.data.filter((upload) => {
+      const uploadName = String(upload.upload_name ?? "").toLowerCase();
+      const uploadLineId = Number(upload.line_id ?? 0);
+      const uploadRunDayType = Number(upload.run_day_type ?? 0);
+
+      const matchesSearch = normalizedSearchQuery
+        ? uploadName.includes(normalizedSearchQuery)
+        : true;
+      const matchesLineId = normalizedLineId > 0 ? uploadLineId === normalizedLineId : true;
+      const matchesRunDayType = normalizedRunDayType > 0 ? uploadRunDayType === normalizedRunDayType : true;
+
+      return matchesSearch && matchesLineId && matchesRunDayType;
+    });
+  }, [previews?.data, searchAndFilter.filterOptions.searchQuery, searchAndFilter.filterOptions.lineId, searchAndFilter.filterOptions.runDayType]);
   
 
 
@@ -211,7 +216,7 @@ export default function UploadHistory() {
           placeholder:text-slate-500
         "
           onChange={(e) => dispatch(setFilterOptions({
-            ...filterOptions,
+            ...searchAndFilter.filterOptions,
             searchQuery: e.target.value,
           }))}
             />
@@ -222,18 +227,18 @@ export default function UploadHistory() {
         <div className="mt-4 flex flex-wrap items-center gap-3 justify-end">
           {/* LINE */}
           <Select
-            value={filterOptions.lineId.toString()}
+            value={searchAndFilter.filterOptions.lineId.toString()}
             onValueChange={(value) =>
               dispatch(
                 setFilterOptions({
-                  ...filterOptions,
+                  ...searchAndFilter.filterOptions,
                   lineId: Number(value),
                 }),
               )
             }
           >
             <SelectTrigger className="w-[190px] border-white/10 bg-white/5">
-              <SelectValue>{LINE_LABELS[filterOptions.lineId] ?? "🚇 All Lines"}</SelectValue>
+              <SelectValue>{LINE_LABELS[searchAndFilter.filterOptions.lineId] ?? "🚇 All Lines"}</SelectValue>
             </SelectTrigger>
 
             <SelectContent className="border-white/10 bg-zinc-950 text-slate-200">
@@ -249,18 +254,19 @@ export default function UploadHistory() {
 
           {/* RUN DAY */}
           <Select
-            value={filterOptions.runDayType.toString()}
-            onValueChange={(value) =>
+            value={searchAndFilter.filterOptions.runDayType.toString()}
+            onValueChange={(value) => {
+              console.log("Selected value:", value);
               dispatch(
                 setFilterOptions({
-                  ...filterOptions,
+                  ...searchAndFilter.filterOptions,
                   runDayType: Number(value),
                 }),
-              )
-            }
+              );
+            }}
           >
             <SelectTrigger className="w-[180px] border-white/10 bg-white/5">
-              <SelectValue>{RUN_DAY_TYPES.find((x) => x.id === filterOptions.runDayType)?.name ?? "📅 All Days"}</SelectValue>
+              <SelectValue>{RUN_DAY_TYPES.find((x) => x.id === searchAndFilter.filterOptions.runDayType)?.name ?? "📅 All Days"}</SelectValue>
             </SelectTrigger>
 
             <SelectContent className="border-white/10 bg-zinc-950 text-slate-200">
@@ -286,7 +292,7 @@ export default function UploadHistory() {
         transition
         hover:bg-red-500/20
       "
-            onClick={() => dispatch(setFilterOptions({ lineId: 0, runDayType: 0, searchQuery: "" }))}
+            onClick={() => dispatch(setFilterOptions({ lineId: 0, runDayType: 0 }))}
 
 
           >

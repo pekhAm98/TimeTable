@@ -7,10 +7,19 @@ import oracledb from "oracledb";
 
 export async function connectDB() {
   try {
+
+    //DEBUG:
+    console.log("Oracle config:", {
+      user: process.env.ORACLE_USER,
+      connectString: process.env.ORACLE_CONNECTION_STRING,
+    });
+
+
+
     await oracledb.createPool({
       user: process.env.ORACLE_USER,
       password: process.env.ORACLE_PASSWORD,
-      connectString: process.env.ORACLE_CONNECT_STRING,
+      connectString: process.env.ORACLE_CONNECTION_STRING,
       poolAlias: "metro",
     });
 

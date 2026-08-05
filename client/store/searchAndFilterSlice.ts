@@ -2,7 +2,7 @@ import {createSlice, PayloadAction} from "@reduxjs/toolkit";
 
 interface FilterOptions {
     lineId: number;
-    runDayType: string;
+    runDayType: number;
 }
 
 interface SearchAndFilterState {
@@ -14,7 +14,7 @@ const initialState: SearchAndFilterState = {
   searchQuery: "",
   filterOptions: {
     lineId: 0,
-    runDayType: "",
+    runDayType: 0,
   },
 };
 

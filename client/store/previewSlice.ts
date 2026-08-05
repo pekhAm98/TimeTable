@@ -16,6 +16,7 @@ export interface PreviewData {
   lineId: number;
   runDayType: number;
   timetable: TimetableRow[];
+  previewId?: number;
 }
 
 interface PreviewState {
@@ -24,6 +25,7 @@ interface PreviewState {
   isDirty: boolean;
   source: "UPLOAD" | "HISTORY";
   uploadId?: number;
+  previewId?: number;
 }
 const initialState: PreviewState = {
   data: null,
@@ -62,6 +64,7 @@ const previewSlice = createSlice({
       state.data = normalizedPayload;
       state.originalData = normalizedPayload;
       state.isDirty = false;
+      state.previewId = action.payload.previewId;
     },
 
     setPreviewSource(state, action: PayloadAction<"UPLOAD" | "HISTORY">) {
@@ -76,12 +79,14 @@ const previewSlice = createSlice({
 
       state.data = normalizedPayload;
       state.isDirty = normalizedPayload.timetable.some((row) => Boolean(row.changed));
+      state.previewId = action.payload.previewId ?? state.previewId;
     },
 
     clearPreview(state) {
       state.data = null;
       state.originalData = null;
       state.isDirty = false;
+      state.previewId = undefined;
     },
 
     cleanState(state) {state.isDirty = false;},

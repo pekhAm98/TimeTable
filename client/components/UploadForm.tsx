@@ -50,11 +50,19 @@ export default function UploadForm() {
 
   
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    accept: {
-      "text/csv": [".csv"],
-      "application/vnd.ms-excel": [".csv"],
-      "text/plain": [".csv"],
-    },
+     accept: {
+    // CSV
+    "text/csv": [".csv"],
+    "application/vnd.ms-excel": [".xls", ".csv"], // EXCELL + CSV
+    "text/plain": [".csv"],
+
+ 
+
+    // Excel (.xlsx)
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+      ".xlsx",
+    ],
+  },
     multiple: false,
     noClick: true,
     onDrop: (acceptedFiles) => {

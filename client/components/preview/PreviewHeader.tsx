@@ -215,7 +215,8 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
   const [saveConfirmedPreview] = useSaveConfirmedPreviewMutation();
   const [publishPreview, { isLoading: isPublishing }] = usePublishPreviewMutation();
   const preview = useSelector((state: any) => state.preview);
-  const canPublish = Number(preview?.data?.previewId ?? 0) > 0;
+  const canPublish = Number(preview?.data?.previewId ?? preview?.previewId ?? 0) > 0;
+  const isSavedPreview = Boolean(preview?.data?.previewId ?? preview?.previewId);
   const { data: allPreviews } = useGetAllPreviewsQuery();
   const dispatch = useDispatch();
 
@@ -289,21 +290,30 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
         timetable: effectiveTimetable,
       };
 
+      let savedPreviewId: number | undefined = activePreview.previewId;
+
       if (!forceCreate && activePreview.previewId) {
         const response = await patchPreviewById({ id: activePreview.previewId, data: requestPayload }).unwrap();
 
         if (!response?.success) {
           throw new Error(response?.message ?? "Failed to save draft");
         }
+
+        savedPreviewId = Number(response?.uploadId ?? response?.previewId ?? activePreview.previewId ?? 0) || undefined;
       } else {
         const response = await saveConfirmedPreview(requestPayload).unwrap();
 
         if (!response?.success) {
           throw new Error(response?.message ?? "Failed to save draft");
         }
+
+        savedPreviewId = Number(response?.uploadId ?? response?.previewId ?? activePreview.previewId ?? 0) || undefined;
       }
 
-      dispatch(setPreviewData(activePreview));
+      dispatch(setPreviewData({
+        ...activePreview,
+        previewId: savedPreviewId,
+      }));
       toast.success("Draft saved successfully", { id: toastId });
       router.push("/");
     } catch (error) {
@@ -421,10 +431,12 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
               className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${
                 isDirty
                   ? "border-amber-400/40 bg-amber-500/10 text-amber-300"
-                  : "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
+                  : isSavedPreview
+                    ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
+                    : "border-slate-400/30 bg-slate-500/10 text-slate-300"
               }`}
             >
-              {isDirty ? "Modified" : "Saved"}
+              {isDirty ? "Modified" : isSavedPreview ? "Saved" : "Unsaved"}
             </span>
           </div>
         </div>

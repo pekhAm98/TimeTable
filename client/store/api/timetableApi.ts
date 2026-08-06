@@ -20,6 +20,7 @@ type PreviewSummary = {
   run_day_type: string;
   created_by: string;
   created_at: string;
+  status: string; 
 };
 
 type RawPreviewSummary = {
@@ -29,12 +30,14 @@ type RawPreviewSummary = {
   run_day_type?: string | number;
   created_by?: string;
   created_at?: string;
+  status?: string;
   UPLOAD_ID?: number;
   UPLOAD_NAME?: string;
   LINE_ID?: number;
   RUN_DAY_TYPE?: string | number;
   CREATED_BY?: string;
   CREATED_AT?: string;
+  STATUS?: string;
 };
 
 type GetAllPreviewsResponse = {
@@ -50,6 +53,7 @@ function normalizePreviewSummary(row: RawPreviewSummary): PreviewSummary {
     run_day_type: String(row.run_day_type ?? row.RUN_DAY_TYPE ?? ""),
     created_by: String(row.created_by ?? row.CREATED_BY ?? ""),
     created_at: String(row.created_at ?? row.CREATED_AT ?? ""),
+    status: String(row.status ?? row.STATUS ?? ""),
   };
 }
 
@@ -78,6 +82,7 @@ type RawPreviewRow = {
   line_id?: number;
   run_day_type?: number | string;
   timetable_data?: string;
+  status?: string;
   UPLOAD_ID?: number;
   UPLOAD_NAME?: string;
   LINE_ID?: number;
@@ -86,6 +91,7 @@ type RawPreviewRow = {
   TIMETABLE?: TimetableRow[];
   CREATED_BY?: string;
   CREATED_AT?: string;
+  STATUS?: string;
 };
 
 type PreviewDetailResponse = {
@@ -96,6 +102,8 @@ type PreviewDetailResponse = {
     lineId: number;
     runDayType: number;
     timetable: TimetableRow[];
+    status: string;
+
   };
 };
 
@@ -166,6 +174,7 @@ function normalizePreviewDetail(row: RawPreviewRow): PreviewDetailResponse["data
     lineId: Number.isFinite(derivedLineId) ? derivedLineId : 0,
     runDayType: derivedRunDayType,
     timetable: derivedTimetable,
+    status: String(row.status ?? row.STATUS ?? "UNKNOWN"),
   };
 }
 
@@ -194,7 +203,7 @@ export const timetableApi = api.injectEndpoints({
       invalidatesTags: ["Preview"],
     }),
 
-    getAllPreviews: builder.query<GetAllPreviewsResponse, void>({
+    getAllPreviews: builder.query<GetAllPreviewsResponse, void>({ ////DONE
       query: () => "/timetables/previews/all",
       transformResponse: (response: { success: boolean; data: RawPreviewSummary[] }): GetAllPreviewsResponse => ({
         success: Boolean(response?.success),
@@ -205,7 +214,9 @@ export const timetableApi = api.injectEndpoints({
         return [{ type: "Preview" as const, id: "LIST" }, ...itemTags];
       },
     }),
-    getPreviewById: builder.query<PreviewDetailResponse, number>({
+
+
+    getPreviewById: builder.query<PreviewDetailResponse, number>({ ///DONE                                  
       query: (id: number) => `/timetables/previews/${id}`,
       transformResponse: (response: { success: boolean; data: RawPreviewRow }): PreviewDetailResponse => ({
         success: Boolean(response?.success),

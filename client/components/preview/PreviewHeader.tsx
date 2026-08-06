@@ -341,6 +341,14 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
       toast.error("Save draft first before publishing", { id: "publish-preview" });
       return;
     }
+    if (!canPublish) {
+      toast.error("Save draft first before publishing", { id: "publish-preview" });
+      return;
+    }
+    if(isDirty) {
+      toast.error("Save draft first before publishing", { id: "publish-preview" });
+      return;
+    }
 
     toast.loading("Publishing timetable...", { id: "publish-preview" });
 

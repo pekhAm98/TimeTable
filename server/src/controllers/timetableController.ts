@@ -5,6 +5,7 @@ import oracledb from "oracledb";
 import { transformAndValidateTimetable, type PreviewData } from "../services/transformTimetable.js";
 import { normalizeTimeToHmsOrThrow } from "../utils/timeFormat.js";
 
+
 async function resolveOracleValue(value: unknown): Promise<unknown> {
   if (value && typeof value === "object" && "getData" in value && typeof (value as { getData?: unknown }).getData === "function") {
     return await (value as { getData: () => Promise<unknown> }).getData();
@@ -63,7 +64,7 @@ function normalizeTimetableRows(raw: unknown): PreviewData["timetable"] {
 export async function previewTimetable(req: Request, res: Response) {
   try {
     const file = req.file;
-
+    
     if (!file) {
       return res.status(400).json({
         message: "CSV file is required",
@@ -99,8 +100,10 @@ export const getPreviews = async (req: Request, res: Response) => {
     line_id,
     run_day_type,
     created_by,
-    created_at
+    created_at,
+    status
 FROM timetable_upload
+WHERE IS_DELETED = 0
 ORDER BY created_at DESC
   `,
   [],
@@ -125,7 +128,7 @@ ORDER BY created_at DESC
 
 
 
-//SAVE PREVIEW first time user saves the preview to the database
+//SAVE PREVIEW first time user saves the preview to the database---MODIFIED
 export const saveConfirmedPreview = async (
   req: Request,
   res: Response
@@ -133,6 +136,8 @@ export const saveConfirmedPreview = async (
   let connection;
 
   try {
+    const user = req.user;
+    //const user = req.session?.userId ?? {};
     const body = req.body ?? {};
     const previewPayload = body.preview ?? body;
     const uploadName = body.uploadName ?? previewPayload.uploadName ?? body.upload_name ?? previewPayload.upload_name;
@@ -140,6 +145,15 @@ export const saveConfirmedPreview = async (
     const runDayType = body.runDayType ?? previewPayload.runDayType ?? body.run_day_type ?? previewPayload.run_day_type;
     const rawTimetable = body.timetable ?? previewPayload.timetable ?? body.updatedPreview ?? previewPayload.updatedPreview;
     const timetable = typeof rawTimetable === "string" ? JSON.parse(rawTimetable) : rawTimetable ?? [];
+
+    if(!user ) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized. User information is missing.",
+      });
+    }
+    const createdBy = String(user.name+'-'+user.id).trim();
+
 
     const preview = {
       uploadName,
@@ -152,29 +166,46 @@ export const saveConfirmedPreview = async (
     const result = await connection.execute(
       `
     INSERT INTO TIMETABLE_UPLOAD
-    (
-      UPLOAD_NAME,
-      LINE_ID,
-      RUN_DAY_TYPE,
-      TIMETABLE_DATA,
-      CREATED_BY
-    )
-    VALUES
-    (
-      :uploadName,
-      :lineId,
-      :runDayType,
-      :timetableData,
-      :createdBy
-    )
-    RETURNING UPLOAD_ID INTO :uploadId
+(
+    UPLOAD_NAME,
+    LINE_ID,
+    RUN_DAY_TYPE,
+    TIMETABLE_DATA,
+    STATUS,
+    CREATED_BY,
+    CREATED_AT,
+    MODIFIED_BY,
+    MODIFIED_AT,
+    PUBLISHED_BY,
+    PUBLISHED_AT,
+    IS_DELETED,
+    DELETED_BY,
+    DELETED_AT
+)
+VALUES
+(
+    :uploadName,
+    :lineId,
+    :runDayType,
+    :timetableData,
+    'UPLOADED',
+    :createdBy,
+    CURRENT_TIMESTAMP,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    0,
+    NULL,
+    NULL
+)
     `,
       {
         uploadName: preview.uploadName,
         lineId: preview.lineId,
         runDayType: preview.runDayType,
         timetableData: JSON.stringify(preview),
-        createdBy: "ADMIN",
+        createdBy: createdBy,
 
         uploadId: {
           dir: oracledb.BIND_OUT,
@@ -182,6 +213,33 @@ export const saveConfirmedPreview = async (
         },
       }
     );
+
+    await connection.execute(
+      `
+      INSERT INTO TIMETABLE_ACTION_LOGS
+      (
+        UPLOAD_ID,
+        ACTION_TYPE,
+        ACTION_BY,
+        ACTION_AT,
+        REMARKS
+      )
+      VALUES
+      (
+        :uploadId,
+        'CREATE',
+        :actionBy,
+        CURRENT_TIMESTAMP,
+        :remarks
+      )
+      `,
+      {
+        uploadId: (result.outBinds as any).uploadId[0],
+        actionBy: createdBy,
+        remarks: 'Initial creation',
+      }
+    );
+
 
     await connection.commit();
 
@@ -208,7 +266,7 @@ export const saveConfirmedPreview = async (
 };
 
 
-//Get a specific preview by ID
+//Get a specific preview by ID---MODIFIED
 
 export const getPreviewById = async (req: Request, res: Response) => {
   let connection;
@@ -227,9 +285,11 @@ export const getPreviewById = async (req: Request, res: Response) => {
         run_day_type,
         timetable_data,
         created_by,
-        created_at
+        created_at,
+        status
       FROM timetable_upload
       WHERE upload_id = :id
+      AND IS_DELETED = 0
       `,
       [id],
       {
@@ -290,12 +350,16 @@ export const getPreviewById = async (req: Request, res: Response) => {
   }
 };
 
-//patch a specific preview by ID
+
+
+
+//patch a specific preview by ID --MODIFIED
 export const patchPreviewById = async (req: Request, res: Response) => {
   let connection;
 
   try {
     const { id } = req.params;
+    const user = req.user;
     const body = req.body ?? {};
     const previewPayload = body.preview ?? body;
     const uploadName = body.uploadName ?? previewPayload.uploadName;
@@ -309,7 +373,12 @@ export const patchPreviewById = async (req: Request, res: Response) => {
       runDayType: Number(runDayType),
       timetable: normalizeTimetableRows(timetable),
     };
-
+    if (!user) {
+  return res.status(401).json({
+    success: false,
+    message: "Unauthorized",
+  });
+}
     connection = await getConnection();
 
     const result = await connection.execute(
@@ -319,17 +388,25 @@ export const patchPreviewById = async (req: Request, res: Response) => {
         UPLOAD_NAME = :uploadName,
         LINE_ID = :lineId,
         RUN_DAY_TYPE = :runDayType,
-        TIMETABLE_DATA = :updatedPreview
+        TIMETABLE_DATA = :updatedPreview,
+        STATUS = :status,
+        MODIFIED_BY = :modifiedBy,
+        MODIFIED_AT = CURRENT_TIMESTAMP
       WHERE UPLOAD_ID = :id
+      AND IS_DELETED = 0
       `,
       {
         uploadName: preview.uploadName,
         lineId: preview.lineId,
         runDayType: preview.runDayType,
         updatedPreview: JSON.stringify(preview),
+        status: "MODIFIED",
+        modifiedBy: (user.name + "-" + user.id).trim()  ,
         id: Number(id),
       }
     );
+
+    
 
     if (result.rowsAffected === 0) {
       return res.status(404).json({
@@ -337,6 +414,29 @@ export const patchPreviewById = async (req: Request, res: Response) => {
         message: "Preview not found.",
       });
     }
+    await connection.execute(
+      `
+      INSERT INTO TIMETABLE_ACTION_LOGS (
+        UPLOAD_ID,
+        ACTION_TYPE,
+        ACTION_BY,
+        ACTION_AT,
+        REMARKS
+      ) VALUES (
+        :uploadId,
+        :actionType,
+        :actionBy,
+        CURRENT_TIMESTAMP,
+        :remarks
+      )
+      `,
+      {
+        uploadId: Number(id),
+        actionType: "MODIFY",
+        actionBy: user?.id ?? "unknown",
+        remarks: "Modified preview",
+      }
+    );
 
     await connection.commit();
 
@@ -362,54 +462,135 @@ export const patchPreviewById = async (req: Request, res: Response) => {
 };
 
 
-
+//DELETE a specific preview by ID --MODIFIED
 export const deletePreviewById = async (req: Request, res: Response) => {
   let connection = null;
-
+  
   try {
     const { id } = req.params;
-    console.log("deletePreviewById -> requested id:", id);
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
     connection = await getConnection();
-    const result = await connection.execute(
+
+    // First check existing record
+    const existing = await connection.execute(
       `
-      DELETE FROM TIMETABLE_UPLOAD
+      SELECT 
+        STATUS,
+        IS_DELETED
+      FROM TIMETABLE_UPLOAD
       WHERE UPLOAD_ID = :id
       `,
-      [id]
+      {
+        id: Number(id),
+      },
+      {
+        outFormat: oracledb.OUT_FORMAT_OBJECT,
+      }
     );
 
-    if (result.rowsAffected === 0) {
-      return res.status(404).json({
+if (!existing.rows || existing.rows.length === 0) {
+  return res.status(404).json({
+    success: false,
+    message: "Timetable upload does not exist.",
+  });
+}
+
+    const upload = existing.rows[0] as {
+      STATUS: string;
+      IS_DELETED: number;
+    };
+
+    if (upload.IS_DELETED === 1) {
+      return res.status(400).json({
         success: false,
-        message: "Preview not found.",
+        message: "Timetable upload is already deleted.",
       });
     }
 
+    if (upload.STATUS === "PUBLISHED") {
+      return res.status(400).json({
+        success: false,
+        message: "Published timetable cannot be deleted.",
+      });
+    }
+
+
+    // Perform soft delete
+    await connection.execute(
+      `
+      UPDATE TIMETABLE_UPLOAD
+      SET 
+          IS_DELETED = 1,
+          DELETED_BY = :deletedBy,
+          DELETED_AT = CURRENT_TIMESTAMP
+      WHERE UPLOAD_ID = :id
+      `,
+      {
+        deletedBy: (user.name + "-" + user.id).trim(),
+        id: Number(id),
+      }
+    );
+
+
+    // Add audit log
+    await connection.execute(
+      `
+      INSERT INTO TIMETABLE_ACTION_LOGS
+      (
+        UPLOAD_ID,
+        ACTION_TYPE,
+        ACTION_BY,
+        REMARKS
+      )
+      VALUES
+      (
+        :uploadId,
+        'DELETE',
+        :actionBy,
+        :remarks
+      )
+      `,
+      {
+        uploadId: Number(id),
+        actionBy: (user.name + "-" + user.id).trim(),
+        remarks: "Timetable deleted",
+      }
+    );
+
+
     await connection.commit();
-    console.log("deletePreviewById -> deleted id:", id);
 
     return res.status(200).json({
       success: true,
-      message: "Preview deleted successfully.",
+      message: "Timetable deleted successfully.",
     });
+
   } catch (err) {
-    console.error("deletePreviewById -> failed", { id: req.params?.id, err });
     if (connection) {
       await connection.rollback();
     }
 
-    return res.status(400).json({
+    return res.status(500).json({
       success: false,
       message:
         err instanceof Error
           ? err.message
-          : "Failed to delete preview",
+          : "Failed to delete timetable",
     });
+
   } finally {
     await connection?.close();
   }
 };
 
+
+//PUBLISH a specific preview by ID 
 export const publishPreview = async (req: Request, res: Response) => {
   type PublishPreviewRow = {
     LINE_ID?: number;
@@ -420,6 +601,8 @@ export const publishPreview = async (req: Request, res: Response) => {
     run_day?: unknown;
     TIMETABLE_DATA?: unknown;
     timetable_data?: unknown;
+    status?: string;
+    STATUS?: string;
   };
 
   const paramId = req.params?.id;
@@ -442,14 +625,20 @@ export const publishPreview = async (req: Request, res: Response) => {
       message: "Invalid preview ID. Must be a positive number.",
     });
   }
-
+  const user = req.user;
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized. User information is missing.",
+    });
+  }
   let connection;
 
   try {
     connection = await getConnection();
-
+    
     const timeTable = await connection.execute<PublishPreviewRow>(
-      `SELECT LINE_ID,RUN_DAY_TYPE,TIMETABLE_DATA FROM timetable_upload WHERE upload_id = :id`,
+      `SELECT LINE_ID,RUN_DAY_TYPE,TIMETABLE_DATA,STATUS FROM timetable_upload WHERE upload_id = :id and IS_DELETED = 0`,
       [previewId],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -461,7 +650,17 @@ export const publishPreview = async (req: Request, res: Response) => {
       });
     }
 
+    //HANDLE ALEREADY PUBLISHED PREVIEW
+  
     const firstRow = timeTable.rows[0];
+    if((firstRow?.STATUS ?? "").toUpperCase() === "PUBLISHED") {
+      return res.status(400).json({
+        success: false,
+        message: "Preview is already published. Cannot publish.",
+      });
+    }
+
+
     const lineIdFromRow = toPositiveNumber(firstRow?.LINE_ID ?? firstRow?.line_id ?? 0);
     const runDayTypeFromRow = toValidRunDayType(firstRow?.RUN_DAY_TYPE ?? firstRow?.run_day_type ?? firstRow?.RUN_DAY ?? firstRow?.run_day);
     const rawTimetableData = await resolveOracleValue(firstRow?.TIMETABLE_DATA ?? firstRow?.timetable_data ?? "[]");
@@ -504,6 +703,53 @@ export const publishPreview = async (req: Request, res: Response) => {
     }
     ///////VERIFIED TIMETABLE IS READY TO BE PUBLISHED
 
+    ///REMOVE THE PREVIOUSLY PUBLISHED TIMETABLE FOR THE SAME LINE_ID AND RUN_DAY_TYPE
+
+
+    await connection.execute(
+      `
+      UPDATE TIMETABLE_UPLOAD
+      SET STATUS = 'MODIFIED',
+          MODIFIED_BY = :modifiedBy,
+          MODIFIED_AT = CURRENT_TIMESTAMP
+      WHERE LINE_ID = :lineId
+      AND RUN_DAY_TYPE = :runDayType
+      AND UPLOAD_ID != :previewId
+      AND STATUS = 'PUBLISHED'
+      AND IS_DELETED = 0
+      `,
+      {
+        modifiedBy: user.name + "-" + user.id,
+        lineId,
+        runDayType,
+        previewId,
+      }
+    );
+
+    const publishResult = await connection.execute(
+      `
+      UPDATE TIMETABLE_UPLOAD
+      SET STATUS = 'PUBLISHED',
+          PUBLISHED_BY = :publishedBy,
+          PUBLISHED_AT = CURRENT_TIMESTAMP
+      WHERE UPLOAD_ID = :previewId
+      AND IS_DELETED = 0
+      `,
+      {
+        publishedBy: user.name + "-" + user.id,
+        previewId,
+      }
+    );
+
+     if (publishResult.rowsAffected === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Preview not found or already deleted. Cannot publish.",
+      });
+    } 
+
+
+    //PUBLISHING THE TIMETABLE TO TRAIN_INFO TABLE
     await connection.execute(
       `
       DELETE FROM TRAIN_INFO
@@ -555,7 +801,7 @@ export const publishPreview = async (req: Request, res: Response) => {
         }
       );
     }
-
+    //INCREMENT THE VERSION NUMBER IN VERSION_PARAMETER TABLE FOR THE SPECIFIC LINE_ID
     await connection.execute(
       `
       UPDATE VERSION_PARAMETER
@@ -569,6 +815,36 @@ export const publishPreview = async (req: Request, res: Response) => {
         lineId,
       }
     );
+
+    //LOG THE PUBLISH ACTION IN TIMETABLE_ACTION_LOGS
+    await connection.execute(
+      `INSERT INTO TIMETABLE_ACTION_LOGS
+      (
+        UPLOAD_ID,
+        ACTION_TYPE,
+        ACTION_BY,
+        ACTION_AT,
+        REMARKS
+      )
+      VALUES
+      (
+        :uploadId,
+        :actionType,
+        :actionBy,
+        CURRENT_TIMESTAMP,
+        :remarks
+      )
+      `,
+      {
+        uploadId: previewId,
+        actionType: "PUBLISH",
+        actionBy: user.name + "-" + user.id,
+        remarks: "Published timetable",
+      }
+    );
+
+
+
 
     await connection.commit();
     console.log("publishPreview -> published", {

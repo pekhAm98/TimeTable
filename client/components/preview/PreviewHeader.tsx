@@ -1,12 +1,13 @@
 "use client";
 import {  toast } from "sonner";
-import { AlertCircle, ChevronDown, TrainFront, CalendarDays, FileSpreadsheet, Save, UploadCloud, Home, FilePlus2, X } from "lucide-react";
+import { AlertCircle, ChevronDown, TrainFront, CalendarDays, FileSpreadsheet, Save, UploadCloud, Home, FilePlus2, X, Plus } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { useEffect, useMemo, useState } from "react";
 import { useGetAllPreviewsQuery, usePatchPreviewByIdMutation, useSaveConfirmedPreviewMutation, usePublishPreviewMutation } from "@/store/api/timetableApi";
 import { setPreviewData } from "@/store/previewSlice";
 import { useRouter } from "next/navigation";
 import { LINE_LABELS, METRO_LINES, RUN_DAY_LABELS, RUN_DAY_TYPES } from "@/constants/maps";
+import { updatePreview, setDirty } from "@/store/previewSlice";
 import { createPortal } from "react-dom";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
   lineId: number;
   runDayType: number;
   totalTrains: number;
+  status: string;
 }
 
 interface SaveAsValues {
@@ -107,8 +109,8 @@ function SaveAsPreviewModal({
             </div>
 
             <div>
-              <h2 className="text-2xl font-bold text-white">Save As</h2>
-              <p className="mt-1 text-sm text-slate-400">Create a new saved preview with optional line and run day changes.</p>
+              <h2 className="text-2xl font-bold text-white">Clone As Draft</h2>
+              <p className="mt-1 text-sm text-slate-400">Create a new draft preview with optional line and run day changes.</p>
             </div>
           </div>
 
@@ -198,7 +200,7 @@ function SaveAsPreviewModal({
             onClick={() => void onSave({ uploadName: normalizedName, lineId, runDayType })}
             className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-6 py-2.5 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:border-amber-400/20 disabled:bg-amber-500/5 disabled:text-amber-200/50"
           >
-            Save As
+            Clone As Draft
           </button>
         </div>
       </div>
@@ -207,7 +209,8 @@ function SaveAsPreviewModal({
   );
 }
 
-export default function PreviewHeader({ uploadName, lineId, runDayType, totalTrains }: Props) {
+export default function PreviewHeader({ uploadName, lineId, runDayType, totalTrains, status }: Props) {
+ // console.log("PreviewHeader props:", { uploadName, lineId, runDayType, totalTrains, status });
   const router = useRouter();
   const isDirty = useSelector((state: any) => state.preview.isDirty);
   const [showSaveAsModal, setShowSaveAsModal] = useState(false);
@@ -215,7 +218,10 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
   const [saveConfirmedPreview] = useSaveConfirmedPreviewMutation();
   const [publishPreview, { isLoading: isPublishing }] = usePublishPreviewMutation();
   const preview = useSelector((state: any) => state.preview);
-  const canPublish = Number(preview?.data?.previewId ?? preview?.previewId ?? 0) > 0;
+  const normalizedStatus = String(preview?.data?.status ?? status ?? "").trim().toUpperCase();
+  const isPublishedPreview = normalizedStatus === "PUBLISHED";
+  const canSaveDraft = !isPublishedPreview;
+  const canPublish = Number(preview?.data?.previewId ?? preview?.previewId ?? 0) > 0 && !isPublishedPreview;
   const isSavedPreview = Boolean(preview?.data?.previewId ?? preview?.previewId);
   const { data: allPreviews } = useGetAllPreviewsQuery();
   const dispatch = useDispatch();
@@ -272,6 +278,11 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
   };
 
   const savePreview = async (toastId: string, overrides?: { uploadName?: string; lineId?: number; runDayType?: number }, forceCreate = false) => {
+    if (isPublishedPreview && !forceCreate) {
+      toast.error("Published preview cannot be saved. Use Save As to create a new draft.", { id: toastId });
+      return;
+    }
+
     const payload = buildSavePayload(overrides);
 
     if (!validateSavePayload(payload, toastId, toastId)) {
@@ -337,6 +348,11 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
   const handlePublish = async () => {
     const previewId = Number(preview?.data?.previewId ?? 0);
 
+    if (isPublishedPreview) {
+      toast.error("Preview is already published. Cannot publish again.", { id: "publish-preview" });
+      return;
+    }
+
     if (!previewId) {
       toast.error("Save draft first before publishing", { id: "publish-preview" });
       return;
@@ -365,6 +381,36 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
       toast.error(getApiErrorMessage(error), { id: "publish-preview" });
     }
   };
+
+
+  const addRow = () => {
+  const activePreview = preview.data;
+
+if (!activePreview) return;
+
+const updatedTimetable = [
+  {
+    trainId: "",
+    sourceStation: "",
+    destinationStation: "",
+    direction: 0,
+    startTime: "00:00:00",
+    endTime: "00:00:00",
+    changed: false,
+    new: true,
+  },
+  ...activePreview.timetable,
+];
+
+dispatch(
+  updatePreview({
+    ...activePreview,
+    timetable: updatedTimetable,
+  })
+);
+
+dispatch(setDirty());
+};
 
   return (
     <div
@@ -437,14 +483,16 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
 
             <span
               className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${
-                isDirty
+                isPublishedPreview
+                  ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-300"
+                  : isDirty
                   ? "border-amber-400/40 bg-amber-500/10 text-amber-300"
                   : isSavedPreview
                     ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
                     : "border-slate-400/30 bg-slate-500/10 text-slate-300"
               }`}
             >
-              {isDirty ? "Modified" : isSavedPreview ? "Saved" : "Unsaved"}
+              {isPublishedPreview ? "Published" : isDirty ? "Modified" : isSavedPreview ? "Saved" : "Unsaved"}
             </span>
           </div>
         </div>
@@ -478,6 +526,8 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
          <button
   type="button"
   onClick={handleSaveDraft}
+  disabled={!canSaveDraft}
+  title={canSaveDraft ? "Save draft" : "Published preview is read-only. Use Save As to create a new draft"}
   className="
     inline-flex
     h-10
@@ -494,6 +544,11 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
     transition
     hover:bg-emerald-500/20
     hover:shadow-[0_0_20px_rgba(16,185,129,0.35)]
+    disabled:border-emerald-400/20
+    disabled:bg-emerald-500/5
+    disabled:text-emerald-200/50
+    disabled:cursor-not-allowed
+    disabled:opacity-70
   "
 >
   <Save size={16} />
@@ -503,6 +558,7 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
           <button
             type="button"
             onClick={handleSaveAs}
+            title={isPublishedPreview ? "Clone this published preview into a new editable draft" : "Create a new draft with a different name/line/day"}
             className="
               inline-flex
               h-10
@@ -522,7 +578,7 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
             "
           >
             <FilePlus2 size={16} />
-            Save As
+            Clone As Draft
           </button>
 
           <button
@@ -552,11 +608,48 @@ export default function PreviewHeader({ uploadName, lineId, runDayType, totalTra
       disabled:cursor-not-allowed
       disabled:opacity-70
     "
-        title={canPublish ? "Publish preview" : "Save draft first to enable publish"}
+        title={isPublishedPreview ? "Already published preview cannot be published again" : canPublish ? "Publish preview" : "Save draft first to enable publish"}
           >
             <UploadCloud size={16} />
         {isPublishing ? "Publishing..." : "Publish"}
           </button>
+                <button
+  type="button"
+  onClick={addRow}
+  disabled={isPublishedPreview}
+  title={
+    isPublishedPreview
+      ? "Published preview is read-only"
+      : "Add a new timetable row"
+  }
+  className="
+    inline-flex
+    h-10
+    items-center
+    justify-center
+    gap-2
+    rounded-xl
+    border border-violet-400/40
+    bg-violet-500/10
+    px-5
+    text-sm
+    font-semibold
+    text-violet-200
+    transition
+    hover:bg-violet-500/20
+    hover:shadow-[0_0_20px_rgba(168,85,247,0.35)]
+    disabled:border-violet-400/20
+    disabled:bg-violet-500/5
+    disabled:text-violet-200/50
+    disabled:cursor-not-allowed
+    disabled:opacity-70
+  "
+>
+  <Plus size={16} />
+  Add Row
+</button>
+
+
         </div>
       </div>
 

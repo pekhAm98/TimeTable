@@ -3,11 +3,12 @@
 import { useDispatch, useSelector } from "react-redux";
 import type { RootState } from "@/store";
 import type { TimetableRow } from "@/store/previewSlice";
-import { updatePreview } from "@/store/previewSlice";
+import { updatePreview,setDirty } from "@/store/previewSlice";
 import { toast } from "sonner";
 import EditableCell from "./EditableCell";
 import DirectionDropdown from "./DirectionDropdown";
 import { normalizeTimeToHms } from "@/src/lib/time";
+import { Trash2 } from "lucide-react";
 
 interface Props {
   preview: {
@@ -15,6 +16,7 @@ interface Props {
     lineId: number;
     runDayType: number;
     timetable: TimetableRow[];
+    status: string;
   };
 }
 
@@ -79,13 +81,16 @@ export default function TimetableTable({ preview }: Props) {
     };
   });
 
-  dispatch(
-    updatePreview({
-      ...preview,
-      timetable: updatedTimetable,
-    })
-  );
+  dispatch(updatePreview({ ...preview, timetable: updatedTimetable }));
 };
+  const deleteRow = (rowIndex: number) => {
+    const updatedTimetable = preview.timetable.filter((_, index) => index !== rowIndex);
+    dispatch(updatePreview({ ...preview, timetable: updatedTimetable }));
+    dispatch(setDirty());
+    
+  };
+
+
 
   return (
     <div
@@ -126,6 +131,8 @@ export default function TimetableTable({ preview }: Props) {
               <th className="px-8 py-4 text-left">Start</th>
 
               <th className="px-8 py-4 text-left">End</th>
+
+              <th className="px-2 py-4 text-center w-20">Delete</th>
             </tr>
           </thead>
 
@@ -141,32 +148,52 @@ export default function TimetableTable({ preview }: Props) {
                   "
               >
                 <td className="px-8 py-4 align-middle">
-                  <EditableCell value={row.trainId} modified={Boolean(row.changed)} onChange={(value) => updateCell(index, "trainId", value)} />
+                  <EditableCell value={row.trainId} modified={Boolean(row.changed)} onBlur={(value) => updateCell(index, "trainId", value)} new={Boolean(row.new)} />
                 </td>
 
                 <td className="px-8 py-4 align-middle">
-                  <EditableCell value={row.sourceStation} modified={Boolean(row.changed)} onChange={(value) => updateCell(index, "sourceStation", value)} />
+                  <EditableCell value={row.sourceStation} modified={Boolean(row.changed)} onBlur={(value) => updateCell(index, "sourceStation", value)} new={Boolean(row.new)} />
                 </td>
 
                 <td className="px-8 py-4 align-middle">
-                  <EditableCell value={row.destinationStation} modified={Boolean(row.changed)} onChange={(value) => updateCell(index, "destinationStation", value)} />
+                  <EditableCell value={row.destinationStation} modified={Boolean(row.changed)} onBlur={(value) => updateCell(index, "destinationStation", value)} new={Boolean(row.new)} />
                 </td>
 
                 <td className="px-8 py-4 align-middle">
                   <DirectionDropdown
                     value={row.direction}
                     modified={Boolean(row.changed)}
-                    onChange={(value) => updateCell(index, "direction", value === 0 ? "UP" : "DOWN")}
+                    onBlur={(value) => updateCell(index, "direction", value === 0 ? "UP" : "DOWN")}
+                    new={Boolean(row.new)}
                   />
                 </td>
 
                 <td className="px-8 py-4 align-middle">
-                  <EditableCell value={row.startTime} type="time" modified={Boolean(row.changed)} onChange={(value) => updateCell(index, "startTime", value)} />
+                  <EditableCell value={row.startTime} type="time" modified={Boolean(row.changed)} onBlur={(value) => updateCell(index, "startTime", value)} new={Boolean(row.new)} />
                 </td>
 
                 <td className="px-8 py-4 align-middle">
-                  <EditableCell value={row.endTime} type="time" modified={Boolean(row.changed)} onChange={(value) => updateCell(index, "endTime", value)} />
+                  <EditableCell value={row.endTime} type="time" modified={Boolean(row.changed)} onBlur={(value) => updateCell(index, "endTime", value)} new={Boolean(row.new)} />
                 </td>
+                <td className="px-4 py-4 text-center">
+  <button
+    type="button"
+    onClick={() => deleteRow(index)}
+    className="
+      inline-flex h-9 w-9 items-center justify-center
+      rounded-lg
+      border border-red-400/30
+      bg-red-500/10
+      text-red-300
+      transition
+      hover:bg-red-500/20
+      hover:text-red-200
+    "
+    title="Delete row"
+  >
+    <Trash2 size={16} />
+  </button>
+</td>
               </tr>
             ))}
           </tbody>

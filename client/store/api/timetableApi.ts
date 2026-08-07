@@ -185,6 +185,8 @@ type UploadedPreviewResponse = {
     lineId: number;
     runDayType: number;
     timetable: TimetableRow[];
+    previewId?: number;
+    status: string;
   };
   message?: string;
 };
@@ -253,7 +255,7 @@ export const timetableApi = api.injectEndpoints({
           const { data } = await queryFulfilled;
           console.info("[deletePreviewById] succeeded", { id, response: data });
         } catch (error) {
-          console.error("[deletePreviewById] failed", { id, error });
+          //
         }
       },
       invalidatesTags: (result, error, id) => [

@@ -9,6 +9,7 @@ export interface TimetableRow {
   startTime: string;
   endTime: string;
   changed?: boolean;
+  new?: boolean;
 }
 
 export interface PreviewData {
@@ -17,6 +18,7 @@ export interface PreviewData {
   runDayType: number;
   timetable: TimetableRow[];
   previewId?: number;
+  status: string;
 }
 
 interface PreviewState {
@@ -90,9 +92,10 @@ const previewSlice = createSlice({
     },
 
     cleanState(state) {state.isDirty = false;},
+    setDirty(state) {state.isDirty = true;},
   },
 });
 
-export const { setPreviewData, setPreviewSource, updatePreview, clearPreview } = previewSlice.actions;
+export const { setPreviewData, setPreviewSource, updatePreview, clearPreview, cleanState, setDirty } = previewSlice.actions;
 
 export default previewSlice.reducer;

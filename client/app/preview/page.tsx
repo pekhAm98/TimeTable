@@ -8,7 +8,7 @@ import TimetableTable from "@/components/preview/TimetableTable";
 
 export default function PreviewPage() {
   const preview = useSelector((state: RootState) => state.preview.data);
-
+  console.log("PreviewPage preview data stats:", preview?.status);
   if (!preview) {
     return (
       <div
@@ -35,7 +35,7 @@ export default function PreviewPage() {
     text-white
   "
     >
-      <PreviewHeader uploadName={preview.uploadName} lineId={preview.lineId} runDayType={preview.runDayType} totalTrains={preview.timetable.length} />
+      <PreviewHeader uploadName={preview.uploadName} lineId={preview.lineId} runDayType={preview.runDayType} totalTrains={preview.timetable.length} status={preview.status} />
 
       <TimetableTable preview={preview} />
     </main>

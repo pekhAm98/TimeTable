@@ -5,7 +5,7 @@ export interface PreviewData {
   lineId: number;
   runDayType: number;
   timetable: TimetableRow[];
-}
+  }
 export interface TimetableRow {
   trainId: string;
   sourceStation: string;

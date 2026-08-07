@@ -6,7 +6,8 @@ import { ChevronDown, ArrowUp, ArrowDown } from "lucide-react";
 interface Props {
   value: number;
   modified?: boolean;
-  onChange: (value: number) => void;
+  onBlur: (value: number) => void;
+  new?: boolean;
 }
 
 const OPTIONS = [
@@ -14,7 +15,7 @@ const OPTIONS = [
   { label: "DOWN", value: 1, icon: ArrowDown },
 ];
 
-export default function DirectionDropdown({ value, modified = false, onChange }: Props) {
+export default function DirectionDropdown({ value, modified = false, onBlur, new: isNew = false }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -59,7 +60,7 @@ export default function DirectionDropdown({ value, modified = false, onChange }:
           gap-3
           rounded-lg
           border
-          ${modified ? "border-yellow-400/70 bg-yellow-500/10" : "border-white/10 bg-black/40"}
+          ${modified ? "border-yellow-400/70 bg-yellow-500/10" : isNew ? "border-green-400/70 bg-green-500/10" : "border-white/10 bg-black/40"}
           px-4
           pr-11
           text-sm
@@ -113,7 +114,7 @@ export default function DirectionDropdown({ value, modified = false, onChange }:
                 role="option"
                 aria-selected={isActive}
                 onClick={() => {
-                  onChange(option.value);
+                  onBlur(option.value);
                   setOpen(false);
                 }}
                 className={`

@@ -163,9 +163,8 @@ export const saveConfirmedPreview = async (
     };
 
     connection = await getConnection();
-    const result = await connection.execute(
-      `
-    INSERT INTO TIMETABLE_UPLOAD
+   const sql = `
+INSERT INTO TIMETABLE_UPLOAD
 (
     UPLOAD_NAME,
     LINE_ID,
@@ -199,55 +198,65 @@ VALUES
     NULL,
     NULL
 )
-    `,
-      {
-        uploadName: preview.uploadName,
-        lineId: preview.lineId,
-        runDayType: preview.runDayType,
-        timetableData: JSON.stringify(preview),
-        createdBy: createdBy,
+RETURNING UPLOAD_ID INTO :uploadId
+`;
 
-        uploadId: {
-          dir: oracledb.BIND_OUT,
-          type: oracledb.NUMBER,
-        },
-      }
-    );
+const binds = {
+  uploadName: preview.uploadName,
+  lineId: preview.lineId,
+  runDayType: preview.runDayType,
+  timetableData: JSON.stringify(preview),
+  createdBy,
+  uploadId: {
+    dir: oracledb.BIND_OUT,
+    type: oracledb.NUMBER,
+  },
+};
 
-    await connection.execute(
-      `
-      INSERT INTO TIMETABLE_ACTION_LOGS
-      (
-        UPLOAD_ID,
-        ACTION_TYPE,
-        ACTION_BY,
-        ACTION_AT,
-        REMARKS
-      )
-      VALUES
-      (
-        :uploadId,
-        'CREATE',
-        :actionBy,
-        CURRENT_TIMESTAMP,
-        :remarks
-      )
-      `,
-      {
-        uploadId: (result.outBinds as any).uploadId[0],
-        actionBy: createdBy,
-        remarks: 'Initial creation',
-      }
-    );
+console.log(sql);
+console.log(binds);
 
+const result = await connection.execute(sql, binds, {
+  autoCommit: false,
+});
 
-    await connection.commit();
+const uploadId = Array.isArray((result.outBinds as any).uploadId)
+  ? (result.outBinds as any).uploadId[0]
+  : (result.outBinds as any).uploadId;
 
-    return res.status(201).json({
-      success: true,
-      uploadId: (result.outBinds as any).uploadId[0],
-      message: "Preview saved successfully.",
-    });
+await connection.execute(
+  `
+  INSERT INTO TIMETABLE_ACTION_LOGS
+  (
+    UPLOAD_ID,
+    ACTION_TYPE,
+    ACTION_BY,
+    ACTION_AT,
+    REMARKS
+  )
+  VALUES
+  (
+    :uploadId,
+    'CREATE',
+    :actionBy,
+    CURRENT_TIMESTAMP,
+    :remarks
+  )
+  `,
+  {
+    uploadId,
+    actionBy: createdBy,
+    remarks: "Initial creation",
+  }
+);
+
+await connection.commit();
+
+return res.status(201).json({
+  success: true,
+  uploadId,
+  message: "Preview saved successfully.",
+});
   } catch (err) {
     if (connection) {
       await connection.rollback();
@@ -336,6 +345,7 @@ export const getPreviewById = async (req: Request, res: Response) => {
         lineId,
         runDayType,
         timetable: normalizedTimetable,
+        status: String(row.status ?? row.STATUS ?? "").trim(),
         created_by: String(row.created_by ?? row.CREATED_BY ?? ""),
         created_at: String(row.created_at ?? row.CREATED_AT ?? ""),
       },
@@ -360,53 +370,98 @@ export const patchPreviewById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const user = req.user;
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
     const body = req.body ?? {};
     const previewPayload = body.preview ?? body;
+
     const uploadName = body.uploadName ?? previewPayload.uploadName;
     const lineId = body.lineId ?? previewPayload.lineId;
     const runDayType = body.runDayType ?? previewPayload.runDayType;
-    const rawTimetable = body.timetable ?? previewPayload.timetable ?? body.updatedPreview ?? previewPayload.updatedPreview;
-    const timetable = typeof rawTimetable === "string" ? JSON.parse(rawTimetable) : rawTimetable ?? [];
+
+    const rawTimetable =
+      body.timetable ??
+      previewPayload.timetable ??
+      body.updatedPreview ??
+      previewPayload.updatedPreview;
+
+    const timetable =
+      typeof rawTimetable === "string"
+        ? JSON.parse(rawTimetable)
+        : rawTimetable ?? [];
+
     const preview = {
       uploadName,
       lineId: Number(lineId),
       runDayType: Number(runDayType),
       timetable: normalizeTimetableRows(timetable),
     };
-    if (!user) {
-  return res.status(401).json({
-    success: false,
-    message: "Unauthorized",
-  });
-}
+
     connection = await getConnection();
 
-    const result = await connection.execute(
+    // Check whether the preview exists and its status
+    const statusResult = await connection.execute<{ STATUS: string }>(
       `
-      UPDATE TIMETABLE_UPLOAD
-      SET
-        UPLOAD_NAME = :uploadName,
-        LINE_ID = :lineId,
-        RUN_DAY_TYPE = :runDayType,
-        TIMETABLE_DATA = :updatedPreview,
-        STATUS = :status,
-        MODIFIED_BY = :modifiedBy,
-        MODIFIED_AT = CURRENT_TIMESTAMP
+      SELECT STATUS
+      FROM TIMETABLE_UPLOAD
       WHERE UPLOAD_ID = :id
-      AND IS_DELETED = 0
+        AND IS_DELETED = 0
       `,
+      { id: Number(id) },
       {
-        uploadName: preview.uploadName,
-        lineId: preview.lineId,
-        runDayType: preview.runDayType,
-        updatedPreview: JSON.stringify(preview),
-        status: "MODIFIED",
-        modifiedBy: (user.name + "-" + user.id).trim()  ,
-        id: Number(id),
+        outFormat: oracledb.OUT_FORMAT_OBJECT,
       }
     );
 
-    
+    const row = statusResult.rows?.[0];
+
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        message: "Preview not found.",
+      });
+    }
+
+    if (row.STATUS === "PUBLISHED") {
+  return res.status(409).json({
+    success: false,
+    message: "Cannot modify a published preview.",
+  });
+}
+
+const result = await connection.execute(
+  `
+  UPDATE TIMETABLE_UPLOAD
+  SET
+      UPLOAD_NAME = :uploadName,
+      LINE_ID = :lineId,
+      RUN_DAY_TYPE = :runDayType,
+      TIMETABLE_DATA = :updatedPreview,
+      STATUS = CASE
+                 WHEN STATUS = 'UPLOADED' THEN 'MODIFIED'
+                 ELSE STATUS
+               END,
+      MODIFIED_BY = :modifiedBy,
+      MODIFIED_AT = CURRENT_TIMESTAMP
+  WHERE UPLOAD_ID = :id
+    AND IS_DELETED = 0
+    AND STATUS <> 'PUBLISHED'
+  `,
+  {
+    uploadName: preview.uploadName,
+    lineId: preview.lineId,
+    runDayType: preview.runDayType,
+    updatedPreview: JSON.stringify(preview),
+    modifiedBy: `${user.name}-${user.id}`,
+    id: Number(id),
+  }
+);
 
     if (result.rowsAffected === 0) {
       return res.status(404).json({
@@ -414,17 +469,21 @@ export const patchPreviewById = async (req: Request, res: Response) => {
         message: "Preview not found.",
       });
     }
+
     await connection.execute(
       `
-      INSERT INTO TIMETABLE_ACTION_LOGS (
+      INSERT INTO TIMETABLE_ACTION_LOGS
+      (
         UPLOAD_ID,
         ACTION_TYPE,
         ACTION_BY,
         ACTION_AT,
         REMARKS
-      ) VALUES (
+      )
+      VALUES
+      (
         :uploadId,
-        :actionType,
+        'MODIFY',
         :actionBy,
         CURRENT_TIMESTAMP,
         :remarks
@@ -432,8 +491,7 @@ export const patchPreviewById = async (req: Request, res: Response) => {
       `,
       {
         uploadId: Number(id),
-        actionType: "MODIFY",
-        actionBy: user?.id ?? "unknown",
+        actionBy: `${user.name}-${user.id}`,
         remarks: "Modified preview",
       }
     );

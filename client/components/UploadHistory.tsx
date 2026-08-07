@@ -1,6 +1,6 @@
 "use client";
 import { useMemo } from "react";
-import { Clock3, ChevronRight, FileSpreadsheet, Search, Trash2} from "lucide-react";
+import { Clock3, ChevronRight, FileSpreadsheet, Search, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDeletePreviewByIdMutation, useGetAllPreviewsQuery, useLazyGetPreviewByIdQuery } from "@/store/api/timetableApi";
@@ -10,6 +10,12 @@ import { RUN_DAY_TYPES } from "../constants/maps";
 import { setFilterOptions } from "@/store/searchAndFilterSlice";
 import { useSelector, useDispatch } from "react-redux";
 //import { RootState } from "@reduxjs/toolkit/query/react";
+
+export const STATUS_STYLES: Record<string, string> = {
+  UPLOADED: "border-blue-400/30 bg-blue-500/10 text-blue-300",
+  MODIFIED: "border-amber-400/30 bg-amber-500/10 text-amber-300",
+  PUBLISHED: "border-emerald-400/30 bg-emerald-500/10 text-emerald-300",
+};
 
 export const LINE_COLORS: Record<string, string> = {
   "Yellow Line": "text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]",
@@ -53,16 +59,17 @@ export default function UploadHistory() {
   const [getPreviewById, { isLoading: isPreviewLoading }] = useLazyGetPreviewByIdQuery();
   const [deletePreviewById, { isLoading: isDeleting }] = useDeletePreviewByIdMutation();
   const { data: previews, isLoading } = useGetAllPreviewsQuery();
+
   const history = previews?.data || [];
-  const searchAndFilter = useSelector(
-  (state: any) => state.searchAndFilter
-);
+  const searchAndFilter = useSelector((state: any) => state.searchAndFilter);
   const filteredHistory = useMemo(() => {
     if (!previews?.data) {
       return [];
     }
 
-    const normalizedSearchQuery = String(searchAndFilter.filterOptions.searchQuery ?? "").trim().toLowerCase();
+    const normalizedSearchQuery = String(searchAndFilter.filterOptions.searchQuery ?? "")
+      .trim()
+      .toLowerCase();
     const normalizedLineId = Number(searchAndFilter.filterOptions.lineId ?? 0);
     const normalizedRunDayType = Number(searchAndFilter.filterOptions.runDayType ?? 0);
 
@@ -70,24 +77,15 @@ export default function UploadHistory() {
       const uploadName = String(upload.upload_name ?? "").toLowerCase();
       const uploadLineId = Number(upload.line_id ?? 0);
       const uploadRunDayType = Number(upload.run_day_type ?? 0);
-
-      const matchesSearch = normalizedSearchQuery
-        ? uploadName.includes(normalizedSearchQuery)
-        : true;
+      const matchesSearch = normalizedSearchQuery ? uploadName.includes(normalizedSearchQuery) : true;
       const matchesLineId = normalizedLineId > 0 ? uploadLineId === normalizedLineId : true;
       const matchesRunDayType = normalizedRunDayType > 0 ? uploadRunDayType === normalizedRunDayType : true;
 
       return matchesSearch && matchesLineId && matchesRunDayType;
     });
   }, [previews?.data, searchAndFilter.filterOptions.searchQuery, searchAndFilter.filterOptions.lineId, searchAndFilter.filterOptions.runDayType]);
-  
 
-
-
-
-
-
-
+  // Handle click on an upload item to fetch its preview details and navigate to the preview page
 
   const handleUploadClick = async (upload: (typeof history)[number]) => {
     try {
@@ -105,6 +103,7 @@ export default function UploadHistory() {
         lineId: Number(result?.data?.lineId ?? upload.line_id ?? firstRowMeta?.lineId ?? 0),
         runDayType: Number(result?.data?.runDayType ?? upload.run_day_type ?? firstRowMeta?.runDayType ?? 0),
         timetable: Array.isArray(result?.data?.timetable) ? result.data.timetable : [],
+        status: String(result?.data?.status).trim(),
       };
 
       if (!mergedPreview.previewId) {
@@ -135,7 +134,13 @@ export default function UploadHistory() {
     }
   };
 
+  // Handle click on the delete button to remove a preview from the history list
   const handleDeleteClick = async (upload: (typeof history)[number]) => {
+    if (upload.status.toLocaleLowerCase() === "published") {
+      toast.error("Cannot delete a published preview.", { id: `delete-${upload.upload_id}` });
+      return;
+    }
+
     toast.loading("Deleting preview...", { id: `delete-${upload.upload_id}` });
 
     try {
@@ -215,10 +220,14 @@ export default function UploadHistory() {
           outline-none
           placeholder:text-slate-500
         "
-          onChange={(e) => dispatch(setFilterOptions({
-            ...searchAndFilter.filterOptions,
-            searchQuery: e.target.value,
-          }))}
+              onChange={(e) =>
+                dispatch(
+                  setFilterOptions({
+                    ...searchAndFilter.filterOptions,
+                    searchQuery: e.target.value,
+                  }),
+                )
+              }
             />
           </div>
         </div>
@@ -293,8 +302,6 @@ export default function UploadHistory() {
         hover:bg-red-500/20
       "
             onClick={() => dispatch(setFilterOptions({ lineId: 0, runDayType: 0 }))}
-
-
           >
             Clear Filters
           </button>
@@ -305,37 +312,43 @@ export default function UploadHistory() {
         {filteredHistory.map((upload) => {
           const lineName = LINE_LABELS[Number(upload.line_id)] ?? `Line ${upload.line_id}`;
 
+          const status = upload.status.toUpperCase();
+
           return (
             <div
               key={upload.upload_id}
               className="
-                group
-                flex w-full items-stretch gap-2
-                rounded-xl
-                border border-white/10
-                bg-white/5
-                p-2
-                transition
-                hover:border-emerald-400/40
-                hover:bg-emerald-500/10
-              "
+        group
+        flex w-full items-stretch gap-2
+        rounded-xl
+        border border-white/10
+        bg-white/5
+        p-2
+        transition
+        hover:border-emerald-400/40
+        hover:bg-emerald-500/10
+      "
             >
               <button type="button" className="flex flex-1 items-center justify-between rounded-lg p-2 text-left" onClick={() => handleUploadClick(upload)} disabled={isPreviewLoading || isDeleting}>
                 <div className="flex items-center gap-4">
                   <div
                     className="
-                      flex h-11 w-11
-                      items-center justify-center
-                      rounded-xl
-                      bg-emerald-500/10
-                      text-emerald-400
-                    "
+              flex h-11 w-11
+              items-center justify-center
+              rounded-xl
+              bg-emerald-500/10
+              text-emerald-400
+            "
                   >
                     <FileSpreadsheet size={22} />
                   </div>
 
                   <div>
-                    <h3 className="font-medium text-white">{upload.upload_name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium text-white">{upload.upload_name}</h3>
+
+                      {status === "PUBLISHED" && <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLES.PUBLISHED}`}>Published</span>}
+                    </div>
 
                     <p className="text-sm text-slate-400">
                       <span className={LINE_COLORS[lineName] ?? "text-slate-300"}>{lineName}</span>
@@ -352,26 +365,26 @@ export default function UploadHistory() {
                 <ChevronRight
                   size={22}
                   className="
-                    text-emerald-400
-                    transition
-                    group-hover:translate-x-1
-                  "
+            text-emerald-400
+            transition
+            group-hover:translate-x-1
+          "
                 />
               </button>
 
               <button
                 type="button"
                 onClick={() => handleDeleteClick(upload)}
-                disabled={isDeleting || isPreviewLoading}
+                disabled={isDeleting || isPreviewLoading || status === "PUBLISHED"}
                 className="
-                  inline-flex items-center justify-center
-                  rounded-lg border border-red-400/30
-                  bg-red-500/10 px-3 text-red-300 transition
-                  hover:bg-red-500/20
-                  disabled:cursor-not-allowed disabled:opacity-70
-                "
+          inline-flex items-center justify-center
+          rounded-lg border border-red-400/30
+          bg-red-500/10 px-3 text-red-300 transition
+          hover:bg-red-500/20
+          disabled:cursor-not-allowed disabled:opacity-70
+        "
                 aria-label={`Delete ${upload.upload_name}`}
-                title="Delete preview"
+                title={status === "PUBLISHED" ? "Cannot delete published preview" : "Delete preview"}
               >
                 <Trash2 size={16} />
               </button>

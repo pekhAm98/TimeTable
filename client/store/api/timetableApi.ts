@@ -22,7 +22,16 @@ type PreviewSummary = {
   created_at: string;
   status: string; 
 };
-
+type TimeTableLogResponse = {
+  actionType: string;
+  actionBy: string;
+  actionAt: string;
+  uploadName: string;
+};
+type GetTimeTableLogsResponse = {
+  success: boolean;
+  data: TimeTableLogResponse[];
+};
 type RawPreviewSummary = {
   upload_id?: number;
   upload_name?: string;
@@ -233,16 +242,18 @@ export const timetableApi = api.injectEndpoints({
         method: "PATCH",
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "Preview", id }],
+      invalidatesTags: (result, error, { id }) => [{ type: "Preview", id }, "PreviewHistory"],
     }),
+
     saveConfirmedPreview: builder.mutation({
       query: (data: SavePreviewPayload) => ({
         url: "/timetables/previews/save",
         method: "POST",
         body: data,
       }),
-      invalidatesTags: ["Preview"],
+      invalidatesTags: ["Preview", "PreviewHistory"],
     }),
+
     deletePreviewById: builder.mutation<MutationBaseResponse, number>({
       query: (id: number) => ({
         url: `/timetables/previews/${id}`,
@@ -261,7 +272,16 @@ export const timetableApi = api.injectEndpoints({
       invalidatesTags: (result, error, id) => [
         { type: "Preview", id },
         { type: "Preview", id: "LIST" },
+        "PreviewHistory"
       ],
+    }),
+
+    getTimeTableLogs: builder.query<GetTimeTableLogsResponse, void>({
+      query: () => ({
+        url: "/timetables/logs",
+        method: "GET",
+      }),
+      providesTags: ["PreviewHistory"],
     }),
 
     publishPreview: builder.mutation<MutationBaseResponse, number>({
@@ -279,7 +299,7 @@ export const timetableApi = api.injectEndpoints({
           console.error("[publishPreview] failed", { id, error });
         }
       },
-      invalidatesTags: ["Preview"],
+      invalidatesTags: ["Preview" ,"PreviewHistory" ],
     }),
   }),
 });
@@ -292,4 +312,5 @@ export const {
   useSaveConfirmedPreviewMutation,
   useDeletePreviewByIdMutation,
   usePublishPreviewMutation,
+  useGetTimeTableLogsQuery,
 } = timetableApi;

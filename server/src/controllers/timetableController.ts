@@ -4,7 +4,12 @@ import { getConnection } from "../config/db.js";
 import oracledb from "oracledb";
 import { transformAndValidateTimetable, type PreviewData } from "../services/transformTimetable.js";
 import { normalizeTimeToHmsOrThrow } from "../utils/timeFormat.js";
-
+type TimetableLogRow = {
+  actionBy: string;
+  actionType: string;
+  actionAt: Date;
+  uploadName: string;
+};
 
 async function resolveOracleValue(value: unknown): Promise<unknown> {
   if (value && typeof value === "object" && "getData" in value && typeof (value as { getData?: unknown }).getData === "function") {
@@ -246,7 +251,7 @@ await connection.execute(
   {
     uploadId,
     actionBy: createdBy,
-    remarks: "Initial creation",
+    remarks: preview.uploadName,
   }
 );
 
@@ -492,7 +497,7 @@ const result = await connection.execute(
       {
         uploadId: Number(id),
         actionBy: `${user.name}-${user.id}`,
-        remarks: "Modified preview",
+        remarks: preview.uploadName,
       }
     );
 
@@ -538,7 +543,8 @@ export const deletePreviewById = async (req: Request, res: Response) => {
     // First check existing record
     const existing = await connection.execute(
       `
-      SELECT 
+      SELECT
+        UPLOAD_NAME,
         STATUS,
         IS_DELETED
       FROM TIMETABLE_UPLOAD
@@ -560,6 +566,7 @@ if (!existing.rows || existing.rows.length === 0) {
 }
 
     const upload = existing.rows[0] as {
+      UPLOAD_NAME: string;
       STATUS: string;
       IS_DELETED: number;
     };
@@ -617,7 +624,7 @@ if (!existing.rows || existing.rows.length === 0) {
       {
         uploadId: Number(id),
         actionBy: (user.name + "-" + user.id).trim(),
-        remarks: "Timetable deleted",
+        remarks: upload.UPLOAD_NAME,
       }
     );
 
@@ -651,6 +658,8 @@ if (!existing.rows || existing.rows.length === 0) {
 //PUBLISH a specific preview by ID 
 export const publishPreview = async (req: Request, res: Response) => {
   type PublishPreviewRow = {
+    UPLOAD_NAME?: string;
+    upload_name?: string;
     LINE_ID?: number;
     line_id?: number;
     RUN_DAY_TYPE?: number;
@@ -696,7 +705,7 @@ export const publishPreview = async (req: Request, res: Response) => {
     connection = await getConnection();
     
     const timeTable = await connection.execute<PublishPreviewRow>(
-      `SELECT LINE_ID,RUN_DAY_TYPE,TIMETABLE_DATA,STATUS FROM timetable_upload WHERE upload_id = :id and IS_DELETED = 0`,
+      `SELECT UPLOAD_NAME, LINE_ID, RUN_DAY_TYPE, TIMETABLE_DATA, STATUS FROM timetable_upload WHERE upload_id = :id and IS_DELETED = 0`,
       [previewId],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -718,7 +727,7 @@ export const publishPreview = async (req: Request, res: Response) => {
       });
     }
 
-
+    const publishedPreviewName = String(firstRow?.UPLOAD_NAME ?? firstRow?.upload_name ?? "").trim();
     const lineIdFromRow = toPositiveNumber(firstRow?.LINE_ID ?? firstRow?.line_id ?? 0);
     const runDayTypeFromRow = toValidRunDayType(firstRow?.RUN_DAY_TYPE ?? firstRow?.run_day_type ?? firstRow?.RUN_DAY ?? firstRow?.run_day);
     const rawTimetableData = await resolveOracleValue(firstRow?.TIMETABLE_DATA ?? firstRow?.timetable_data ?? "[]");
@@ -789,14 +798,14 @@ export const publishPreview = async (req: Request, res: Response) => {
       UPDATE TIMETABLE_UPLOAD
       SET STATUS = 'PUBLISHED',
           PUBLISHED_BY = :publishedBy,
-          PUBLISHED_AT = CURRENT_TIMESTAMP
+          PUBLISHED_AT = CURRENT_TIMESTAMP,
       WHERE UPLOAD_ID = :previewId
       AND IS_DELETED = 0
       `,
       {
         publishedBy: user.name + "-" + user.id,
         previewId,
-      }
+          }
     );
 
      if (publishResult.rowsAffected === 0) {
@@ -897,7 +906,7 @@ export const publishPreview = async (req: Request, res: Response) => {
         uploadId: previewId,
         actionType: "PUBLISH",
         actionBy: user.name + "-" + user.id,
-        remarks: "Published timetable",
+        remarks: publishedPreviewName,
       }
     );
 
@@ -931,6 +940,54 @@ export const publishPreview = async (req: Request, res: Response) => {
     return res.status(400).json({
       success: false,
       message: err instanceof Error ? err.message : "Failed to fetch preview for publishing",
+    });
+  } finally {
+    await connection?.close();
+  }
+};
+
+
+
+export const timeTableLogs = async (req: Request, res: Response) => {
+  let connection;
+
+  try {
+    connection = await getConnection();
+
+    const result = await connection.execute<TimetableLogRow>(
+      `
+        SELECT
+          ACTION_TYPE AS "actionType",
+          ACTION_BY AS "actionBy",
+          ACTION_AT AS "actionAt",
+          REMARKS AS "uploadName"
+        FROM TIMETABLE_ACTION_LOGS
+        ORDER BY ACTION_AT DESC
+      `,
+      [],
+      {
+        outFormat: oracledb.OUT_FORMAT_OBJECT,
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows?.map((row) => ({
+        actionBy: row.actionBy.split("-")[0] ?? row.actionBy,
+        actionType: row.actionType,
+        actionAt: row.actionAt,
+        uploadName: row.uploadName,
+      })),
+    });
+  } catch (err) {
+    console.error("timeTableLogs -> failed", { err });
+
+    return res.status(400).json({
+      success: false,
+      message:
+        err instanceof Error
+          ? err.message
+          : "Failed to fetch timetable logs",
     });
   } finally {
     await connection?.close();

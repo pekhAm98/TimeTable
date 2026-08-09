@@ -798,7 +798,7 @@ export const publishPreview = async (req: Request, res: Response) => {
       UPDATE TIMETABLE_UPLOAD
       SET STATUS = 'PUBLISHED',
           PUBLISHED_BY = :publishedBy,
-          PUBLISHED_AT = CURRENT_TIMESTAMP,
+          PUBLISHED_AT = CURRENT_TIMESTAMP
       WHERE UPLOAD_ID = :previewId
       AND IS_DELETED = 0
       `,
@@ -947,13 +947,17 @@ export const publishPreview = async (req: Request, res: Response) => {
 };
 
 
-
 export const timeTableLogs = async (req: Request, res: Response) => {
   let connection;
+
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const offset = (page - 1) * limit;
 
   try {
     connection = await getConnection();
 
+    // Fetch current page
     const result = await connection.execute<TimetableLogRow>(
       `
         SELECT
@@ -963,21 +967,43 @@ export const timeTableLogs = async (req: Request, res: Response) => {
           REMARKS AS "uploadName"
         FROM TIMETABLE_ACTION_LOGS
         ORDER BY ACTION_AT DESC
+        OFFSET :offset ROWS
+        FETCH NEXT :limit ROWS ONLY
       `,
-      [],
+      {
+        offset,
+        limit,
+      },
       {
         outFormat: oracledb.OUT_FORMAT_OBJECT,
       }
     );
 
+    // Get total number of logs
+    const countResult = await connection.execute<{ total: number }>(
+      `
+        SELECT COUNT(*) AS "total"
+        FROM TIMETABLE_ACTION_LOGS
+      `,
+      {},
+      {
+        outFormat: oracledb.OUT_FORMAT_OBJECT,
+      }
+    );
+
+    const total = Number(countResult.rows?.[0]?.total ?? 0);
+
     return res.status(200).json({
       success: true,
+
       data: result.rows?.map((row) => ({
         actionBy: row.actionBy.split("-")[0] ?? row.actionBy,
         actionType: row.actionType,
         actionAt: row.actionAt,
         uploadName: row.uploadName,
       })),
+
+      total,
     });
   } catch (err) {
     console.error("timeTableLogs -> failed", { err });

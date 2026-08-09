@@ -31,6 +31,7 @@ type TimeTableLogResponse = {
 type GetTimeTableLogsResponse = {
   success: boolean;
   data: TimeTableLogResponse[];
+  total: number;
 };
 type RawPreviewSummary = {
   upload_id?: number;
@@ -276,9 +277,9 @@ export const timetableApi = api.injectEndpoints({
       ],
     }),
 
-    getTimeTableLogs: builder.query<GetTimeTableLogsResponse, void>({
-      query: () => ({
-        url: "/timetables/logs",
+    getTimeTableLogs: builder.query<GetTimeTableLogsResponse, { page: number; limit: number }>({
+      query: ({ page, limit }) => ({
+        url: `/timetables/logs?page=${page}&limit=${limit}`,
         method: "GET",
       }),
       providesTags: ["PreviewHistory"],

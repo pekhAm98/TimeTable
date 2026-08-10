@@ -15,7 +15,10 @@ const PORT = process.env.PORT || 8000;
 await connectDB();
 app.use(express.json());
 app.use(cors({
-  origin: "http://localhost:3000",
+  origin: [
+      "http://localhost:3000",
+      "http://10.217.3.55:3000",
+    ],
   credentials: true,
 }));
 app.use(morgan("dev"));

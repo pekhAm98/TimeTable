@@ -7,7 +7,10 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx watch src/index.ts",
     "create-db": "tsx src/Scripts/newTables.ts",
-    "auth-migrate": "npx @better-auth/cli generate"
+    "auth-migrate": "npx @better-auth/cli generate",
+    "build": "tsc",
+    "start": "node dist/src/index.js"
+
   },
   "keywords": [],
   "type": "module",

@@ -33,10 +33,12 @@ export interface ValidationError {
 
 
 /////KNOA_KNAP CHECK and invalid station check
+////KKS0_KKVS CHECK and invalid station check
 function normalizeStation(station: string) {
   const rawStation = station.trim().toUpperCase();
   const stationAliases: Record<string, string> = {
     KNAP: "KNOA",
+    KKSO: "KKVS",
   };
   const normalizedStation = stationAliases[rawStation] ?? rawStation;
 

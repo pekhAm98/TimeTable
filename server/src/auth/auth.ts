@@ -1,7 +1,8 @@
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
 import { loadEnv } from "../config/loadEnv.js";
-
+import dotenv from "dotenv";
+dotenv.config();
 loadEnv();
 
 function resolveDatabaseUrl(): string {
@@ -50,7 +51,9 @@ export const auth = betterAuth({
   baseURL: betterAuthUrl,
 
   trustedOrigins: [
-    "http://localhost:3000",
+    ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",").map((origin) =>
+      origin.trim()
+    ) ?? []),
   ],
 
   session: {

@@ -1,0 +1,1 @@
+alter table "user" add column "operatorId" integer not null;

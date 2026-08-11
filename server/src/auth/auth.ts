@@ -42,21 +42,27 @@ const pool = new Pool({
 export const auth = betterAuth({
   database: pool,
 
-  emailAndPassword: {
-    enabled: true,
-  },
-
   secret: betterAuthSecret,
 
   baseURL: betterAuthUrl,
 
   trustedOrigins: [
-    ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",").map((origin) =>
-      origin.trim()
-    ) ?? []),
+    ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS
+      ?.split(",")
+      .map((origin) => origin.trim()) ?? []),
   ],
 
+  user: {
+    additionalFields: {
+      operatorId: {
+        type: "number",
+        required: true,
+        input: false,
+      },
+    },
+  },
+
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    expiresIn: 60 * 60 * 24 * 7,
   },
 });

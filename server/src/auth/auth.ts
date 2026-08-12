@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { Pool } from "pg";
 import { loadEnv } from "../config/loadEnv.js";
 import dotenv from "dotenv";
+import { operatorAuthPlugin } from "./operatorAuthPlugin.js";
 dotenv.config();
 loadEnv();
 
@@ -62,6 +63,7 @@ export const auth = betterAuth({
     },
   },
 
+  plugins: [ operatorAuthPlugin],
   session: {
     expiresIn: 60 * 60 * 24 * 7,
   },

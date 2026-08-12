@@ -1,4 +1,4 @@
-import AuthGuard from "@/components/auth/AuthGuard";
+
 import "./globals.css";
 import { ReduxProvider } from "./providers";
 import { cn } from "@/lib/utils";
@@ -15,9 +15,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("font-sans")}>
       <body className="bg-slate-100">
-        <AuthGuard>
+        
           <ReduxProvider>{children}</ReduxProvider>
-        </AuthGuard>
+        
       </body>
     </html>
   );

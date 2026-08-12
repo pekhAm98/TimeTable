@@ -10,10 +10,17 @@ import { toNodeHandler } from "better-auth/node";
 import {requireAuth} from "./middleware/authMiddleware.js";
 
 const app = express();
+console.log("🔥 THIS INDEX.TS IS RUNNING");
 const PORT = process.env.PORT || 8000;
 
 await connectDB();
 app.use(express.json());
+
+app.get("/test", (req, res) => {
+  console.log("🔥 /test hit");
+  res.json({ message: "Express is alive" });
+});
+
 app.use(cors({
   origin: [
       "http://localhost:3000",
@@ -23,7 +30,12 @@ app.use(cors({
 }));
 app.use(morgan("dev"));
 
+//app.use("/api/auth", operatorAuthRoutes);
 
+app.post("/api/auth/operator-login-test", (req, res) => {
+  console.log("🔥 operator test route hit");
+  res.json({ message: "Route works" });
+});
 app.all("/api/auth/*splat", toNodeHandler(auth));
 
 // Test the connection

@@ -22,20 +22,17 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/operator-login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            operatorCode: operatorCode.trim(),
-            password,
-          }),
-        }
-      );
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/operator-login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          operatorCode: operatorCode.trim(),
+          password,
+        }),
+      });
 
       const data = await response.json();
 
@@ -44,26 +41,40 @@ export default function LoginForm() {
 
       // ❌ Authentication failed
       if (!response.ok) {
-        toast.error(
-          data.message || "Invalid operator code or password"
-        );
+        toast.error(data.message || "Invalid operator code or password");
 
         return;
       }
+      // Confirm that the browser can immediately use
+      // the newly-created session cookie.
+      const sessionResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/get-session`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
 
-      // ✅ Authentication succeeded
-      toast.success(
-        `Welcome, ${data.user?.name ?? "Operator"}`
-      );
+      if (!sessionResponse.ok) {
+        toast.error("Login succeeded, but session could not be verified.");
+        return;
+      }
 
-      // Let the Next.js proxy verify the session
-      router.push("/");
+      const sessionData = await sessionResponse.json();
+
+      console.log("🔐 Session after login:", sessionData);
+
+      if (!sessionData?.session || !sessionData?.user) {
+        toast.error("Login succeeded, but session is not ready.");
+        return;
+      }
+
+      toast.success(`Welcome, ${data.user?.name ?? "Operator"}`);
+
+      router.replace("/");
+      router.refresh();
     } catch (error) {
       console.error("❌ Login error:", error);
 
-      toast.error(
-        "Unable to connect to authentication server"
-      );
+      toast.error("Unable to connect to authentication server");
     } finally {
       setLoading(false);
     }
@@ -83,21 +94,15 @@ export default function LoginForm() {
     >
       {/* Header */}
       <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold text-white">
-          Metro Portal
-        </h1>
+        <h1 className="text-3xl font-bold text-white">Metro Portal</h1>
 
-        <p className="mt-2 text-sm text-slate-400">
-          Sign in to access timetable management
-        </p>
+        <p className="mt-2 text-sm text-slate-400">Sign in to access timetable management</p>
       </div>
 
       <form onSubmit={handleLogin} className="space-y-5">
         {/* Operator Code */}
         <div>
-          <label className="text-sm text-slate-300">
-            Operator Code
-          </label>
+          <label className="text-sm text-slate-300">Operator Code</label>
 
           <div
             className="
@@ -109,16 +114,12 @@ export default function LoginForm() {
               focus-within:border-cyan-400/50
             "
           >
-            <span className="text-sm font-semibold text-slate-400">
-              ID
-            </span>
+            <span className="text-sm font-semibold text-slate-400">ID</span>
 
             <input
               type="text"
               value={operatorCode}
-              onChange={(e) =>
-                setOperatorCode(e.target.value)
-              }
+              onChange={(e) => setOperatorCode(e.target.value)}
               placeholder="OPERATOR"
               autoComplete="username"
               className="
@@ -136,9 +137,7 @@ export default function LoginForm() {
 
         {/* Password */}
         <div>
-          <label className="text-sm text-slate-300">
-            Password
-          </label>
+          <label className="text-sm text-slate-300">Password</label>
 
           <div
             className="
@@ -150,17 +149,12 @@ export default function LoginForm() {
               focus-within:border-cyan-400/50
             "
           >
-            <Lock
-              size={18}
-              className="text-slate-400"
-            />
+            <Lock size={18} className="text-slate-400" />
 
             <input
               type={showPassword ? "text" : "password"}
               value={password}
-              onChange={(e) =>
-                setPassword(e.target.value)
-              }
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               autoComplete="current-password"
               className="
@@ -175,20 +169,14 @@ export default function LoginForm() {
 
             <button
               type="button"
-              onClick={() =>
-                setShowPassword((prev) => !prev)
-              }
+              onClick={() => setShowPassword((prev) => !prev)}
               className="
                 text-slate-400
                 transition
                 hover:text-white
               "
             >
-              {showPassword ? (
-                <EyeOff size={18} />
-              ) : (
-                <Eye size={18} />
-              )}
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
         </div>
@@ -220,9 +208,7 @@ export default function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-slate-400">
-        Internal Metro Operations System
-      </p>
+      <p className="mt-6 text-center text-sm text-slate-400">Internal Metro Operations System</p>
     </div>
   );
 }

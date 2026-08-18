@@ -6,6 +6,32 @@ import Sybase from "sybase";
 
 let sybaseDB: Sybase | null = null;
 
+// Prevent multiple requests from reconnecting simultaneously.
+let sybaseReconnectPromise: Promise<Sybase> | null = null;
+
+async function createSybaseConnection(): Promise<Sybase> {
+  const db = new Sybase(
+    process.env.SYBASE_HOST!,
+    Number(process.env.SYBASE_PORT!),
+    process.env.SYBASE_DATABASE!,
+    process.env.SYBASE_USER!,
+    process.env.SYBASE_PASSWORD!
+  );
+
+  await new Promise<void>((resolve, reject) => {
+    db.connect((err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      resolve();
+    });
+  });
+
+  return db;
+}
+
 export async function connectDB() {
   try {
     // =========================
@@ -30,52 +56,9 @@ export async function connectDB() {
     // SYBASE
     // =========================
 
-    sybaseDB = new Sybase(
-      process.env.SYBASE_HOST!,
-      Number(process.env.SYBASE_PORT!),
-      process.env.SYBASE_DATABASE!,
-      process.env.SYBASE_USER!,
-      process.env.SYBASE_PASSWORD!
-    );
-
-    await new Promise<void>((resolve, reject) => {
-      sybaseDB!.connect((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-
-        resolve();
-      });
-    });
+    sybaseDB = await createSybaseConnection();
 
     console.log("✅ Sybase connected");
-
-    // Test query
-//     await new Promise<void>((resolve, reject) => {
-//       sybaseDB!.query(
-//   `
-//     SELECT TOP 5
-//       OPERATOR_ID,
-//       OPERATOR_CODE,
-//       OPERATOR_NAME,
-//       LOCATION_ID,
-//       OPERATOR_STATUS,
-//       OPERATOR_TYPE_ID
-//     FROM OPERATOR
-//   `,
-//   (err, data) => {
-//     if (err) {
-//       reject(err);
-//       return;
-//     }
-
-//     console.log("✅ Operator query:", data);
-//     resolve();
-//   }
-// );
-//     });
-
   } catch (err) {
     console.error("❌ Database connection failed");
     console.error(err);
@@ -83,27 +66,87 @@ export async function connectDB() {
   }
 }
 
+export async function reconnectSybase(): Promise<Sybase> {
+  // If another request is already reconnecting,
+  // wait for that same reconnect operation.
+  if (sybaseReconnectPromise) {
+    console.log("⏳ Sybase reconnect already in progress...");
+    return sybaseReconnectPromise;
+  }
+
+  sybaseReconnectPromise = (async () => {
+    console.log("🔄 Reconnecting to Sybase...");
+
+    // Dispose of the old connection object.
+    if (sybaseDB) {
+      try {
+        sybaseDB.disconnect();
+      } catch (err) {
+        console.warn(
+          "⚠️ Old Sybase connection was already closed."
+        );
+      }
+
+      sybaseDB = null;
+    }
+
+    // Create a completely new connection.
+    const newConnection = await createSybaseConnection();
+
+    sybaseDB = newConnection;
+
+    console.log("✅ Sybase reconnected");
+
+    return newConnection;
+  })();
+
+  try {
+    return await sybaseReconnectPromise;
+  } finally {
+    // Allow another reconnect in the future if necessary.
+    sybaseReconnectPromise = null;
+  }
+}
+
 export async function closeDBPool() {
   try {
-    // Close Oracle
+    // =========================
+    // ORACLE
+    // =========================
+
     try {
       const pool = oracledb.getPool("metro");
+
       await pool.close(10);
+
       console.log("✅ Oracle pool closed");
     } catch (err) {
-      if (!(err instanceof Error && err.message.includes("NJS-047"))) {
+      if (
+        !(
+          err instanceof Error &&
+          err.message.includes("NJS-047")
+        )
+      ) {
         console.error("❌ Failed to close Oracle pool");
         console.error(err);
       }
     }
 
-    // Close Sybase
+    // =========================
+    // SYBASE
+    // =========================
+
     if (sybaseDB) {
-      sybaseDB.disconnect();
+      try {
+        sybaseDB.disconnect();
+      } catch {
+        // Ignore already-closed connection.
+      }
+
       sybaseDB = null;
+
       console.log("✅ Sybase connection closed");
     }
-
   } catch (err) {
     console.error("❌ Failed to close database connections");
     console.error(err);
@@ -114,9 +157,11 @@ export function getConnection() {
   return oracledb.getConnection("metro");
 }
 
-export function getSybaseConnection() {
+export function getSybaseConnection(): Sybase {
   if (!sybaseDB) {
-    throw new Error("Sybase connection is not initialized");
+    throw new Error(
+      "Sybase connection is not initialized"
+    );
   }
 
   return sybaseDB;

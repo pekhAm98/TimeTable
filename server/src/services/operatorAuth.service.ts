@@ -1,4 +1,8 @@
-import { getSybaseConnection } from "../config/db.js";
+import {
+  getSybaseConnection,
+  reconnectSybase,
+} from "../config/db.js";
+
 
 export interface ValidatedOperator {
   operatorId: number;
@@ -10,11 +14,11 @@ function escapeSqlString(value: string): string {
   return value.replace(/'/g, "''");
 }
 
-function querySybase<T = unknown>(
+
+function executeSybaseQuery<T>(
+  db: ReturnType<typeof getSybaseConnection>,
   sql: string
 ): Promise<T[]> {
-  const db = getSybaseConnection();
-
   return new Promise((resolve, reject) => {
     db.query(sql, (err, data) => {
       if (err) {
@@ -27,6 +31,49 @@ function querySybase<T = unknown>(
   });
 }
 
+function isClosedSybaseConnection(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message.includes("JZ0C0") ||
+    error.message.toLowerCase().includes(
+      "connection is already closed"
+    )
+  );
+}
+
+export async function querySybase<T = unknown>(
+  sql: string
+): Promise<T[]> {
+
+  // First attempt
+  try {
+    const db = getSybaseConnection();
+
+    return await executeSybaseQuery<T>(db, sql);
+
+  } catch (error) {
+
+    // Only reconnect for a dead connection.
+    if (!isClosedSybaseConnection(error)) {
+      throw error;
+    }
+
+    console.warn(
+      "⚠️ Sybase connection is closed. Reconnecting..."
+    );
+
+    // Reconnect
+    const db = await reconnectSybase();
+
+    // Retry ONCE
+    console.log("🔁 Retrying Sybase query...");
+
+    return await executeSybaseQuery<T>(db, sql);
+  }
+}
 export async function validateOperator(
   operatorCode: string,
   password: string

@@ -9,16 +9,18 @@ function isStaticAsset(pathname: string): boolean {
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  // Public routes / static resources
+  // Static resources / API routes don't need proxy authentication.
+  // IMPORTANT: Do NOT bypass PUBLIC_PATHS here.
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname === "/favicon.ico" ||
-    isStaticAsset(pathname) ||
-    PUBLIC_PATHS.has(pathname)
+    isStaticAsset(pathname)
   ) {
     return NextResponse.next();
   }
+
+  const isPublicPath = PUBLIC_PATHS.has(pathname);
 
   const apiBase =
     process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -35,10 +37,7 @@ export async function proxy(request: NextRequest) {
       }
     );
 
-    console.log(
-      "🔐 Proxy session status:",
-      sessionResponse.status
-    );
+    console.log("🔐 Proxy session status:", sessionResponse.status);
 
     if (sessionResponse.ok) {
       const sessionPayload = (await sessionResponse.json()) as
@@ -48,20 +47,41 @@ export async function proxy(request: NextRequest) {
           }
         | null;
 
-      console.log(
-        "🔐 Proxy session:",
-        sessionPayload
-      );
+      console.log("🔐 Proxy session:", sessionPayload);
 
-      // No session → continue to redirect below
-      if (sessionPayload?.session && sessionPayload?.user) {
+      const authenticated =
+        !!sessionPayload?.session &&
+        !!sessionPayload?.user;
+
+      // Authenticated user trying to access /login or /register
+      if (authenticated && isPublicPath) {
+        console.log(
+          `🔄 Authenticated user on ${pathname} → redirecting to /`
+        );
+
+        return NextResponse.redirect(
+          new URL("/", request.url)
+        );
+      }
+
+      // Authenticated user accessing a protected route
+      if (authenticated) {
+        return NextResponse.next();
+      }
+
+      // Unauthenticated user accessing a public route
+      if (isPublicPath) {
         return NextResponse.next();
       }
     }
   } catch (error) {
     console.error("❌ Proxy auth check failed:", error);
+
+    // If the session check itself fails, don't accidentally
+    // expose protected routes.
   }
 
+  // Unauthenticated user trying to access a protected route
   const loginUrl = new URL("/login", request.url);
 
   loginUrl.searchParams.set(

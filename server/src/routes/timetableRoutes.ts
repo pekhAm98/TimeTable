@@ -11,6 +11,8 @@ router.post("/previews/save", saveConfirmedPreview);
 router.post("/previews/:id/publish", publishPreview);
 router.post("/previews/publish", publishPreview);
 router.get("/logs", timeTableLogs);
+
+
 export default router;
 
 

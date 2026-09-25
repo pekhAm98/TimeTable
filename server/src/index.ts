@@ -21,13 +21,16 @@ app.get("/test", (req, res) => {
   res.json({ message: "Express is alive" });
 });
 
-app.use(cors({
-  origin: [
+app.use(
+  cors({
+    origin: [
       "http://localhost:3000",
+      "http://10.14.50.83:3000",
       "http://10.217.3.55:3000",
     ],
-  credentials: true,
-}));
+    credentials: true,
+  })
+);
 app.use(morgan("dev"));
 
 //app.use("/api/auth", operatorAuthRoutes);

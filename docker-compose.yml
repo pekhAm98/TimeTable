@@ -40,9 +40,10 @@ services:
 
   client:
     build:
-      context: ./client
-      args:
-        NEXT_PUBLIC_API_URL: "http://10.217.3.55:8000"
+    context: ./client
+    args:
+      NEXT_PUBLIC_API_URL: "http://10.217.3.55:8000"
+      API_INTERNAL_URL: "http://server:8000"
     container_name: metro-client
     ports:
       - "3000:3000"

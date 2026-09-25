@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -14,15 +14,25 @@ export default function LoginForm() {
   const [operatorCode, setOperatorCode] = useState("");
   const [password, setPassword] = useState("");
 
+
+useEffect(() => {
+  console.log("API URL:", process.env.NEXT_PUBLIC_API_URL);
+  console.log(
+    "Login URL:",
+    `${process.env.NEXT_PUBLIC_API_URL}/api/auth/operator-login`
+  );
+}, []);
   async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
+  e.preventDefault();
 
-    if (loading) return;
+  if (loading) return;
 
-    setLoading(true);
+  setLoading(true);
 
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/operator-login`, {
+  try {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/auth/operator-login`,
+      {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -32,54 +42,78 @@ export default function LoginForm() {
           operatorCode: operatorCode.trim(),
           password,
         }),
-      });
-
-      const data = await response.json();
-
-      console.log("🔐 Login status:", response.status);
-      console.log("🔐 Login response:", data);
-
-      // ❌ Authentication failed
-      if (!response.ok) {
-        toast.error(data.message || "Invalid operator code or password");
-
-        return;
       }
-      // Confirm that the browser can immediately use
-      // the newly-created session cookie.
-      const sessionResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/get-session`, {
+    );
+
+    console.log("🔐 Login status:", response.status);
+    console.log(
+      "🔐 Login content-type:",
+      response.headers.get("content-type")
+    );
+
+    const responseText = await response.text();
+
+    console.log("🔐 Login raw response:", responseText);
+
+    type LoginResponse = {
+      message?: string;
+      user?: {
+        name?: string;
+      };
+    };
+
+    let data: LoginResponse = {};
+
+    try {
+      if (responseText) {
+        data = JSON.parse(responseText) as LoginResponse;
+      }
+    } catch (error) {
+      console.error("❌ Response was not valid JSON:", error);
+    }
+
+    // Authentication failed
+    if (!response.ok) {
+      toast.error(data.message || "Invalid operator code or password");
+      return;
+    }
+
+    // Confirm that the newly-created session cookie works
+    const sessionResponse = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/auth/get-session`,
+      {
         method: "GET",
         credentials: "include",
         cache: "no-store",
-      });
-
-      if (!sessionResponse.ok) {
-        toast.error("Login succeeded, but session could not be verified.");
-        return;
       }
+    );
 
-      const sessionData = await sessionResponse.json();
-
-      console.log("🔐 Session after login:", sessionData);
-
-      if (!sessionData?.session || !sessionData?.user) {
-        toast.error("Login succeeded, but session is not ready.");
-        return;
-      }
-
-      toast.success(`Welcome, ${data.user?.name ?? "Operator"}`);
-
-      router.replace("/");
-      router.refresh();
-    } catch (error) {
-      console.error("❌ Login error:", error);
-
-      toast.error("Unable to connect to authentication server");
-    } finally {
-      setLoading(false);
+    if (!sessionResponse.ok) {
+      toast.error("Login succeeded, but session could not be verified.");
+      return;
     }
-  }
 
+    const sessionData = await sessionResponse.json();
+
+    console.log("🔐 Session after login:", sessionData);
+
+    if (!sessionData?.session || !sessionData?.user) {
+      toast.error("Login succeeded, but session is not ready.");
+      return;
+    }
+
+    toast.success(`Welcome, ${data.user?.name ?? "Operator"}`);
+
+    router.replace("/");
+    router.refresh();
+  } catch (error) {
+    console.error("❌ Login error:", error);
+
+    toast.error("Unable to connect to authentication server");
+  } finally {
+    setLoading(false);
+  }
+}
   return (
     <div
       className="

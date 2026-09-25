@@ -3,6 +3,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import previewReducer from "./previewSlice";
 import uploadSelectionReducer from "./uploadSelectionSlice";
 import searchAndFilterReducer from "./searchAndFilterSlice";
+import createSelectionReducer from "./createSelectionSlice";
 import { api } from "./api/api";
 
 import {
@@ -28,12 +29,20 @@ const uploadSelectionPersistConfig = {
   storage: storageSession,
 };
 
+const createSelectionPersistConfig = {
+  key: "createSelection",
+  storage: storageSession,
+};
 
 const searchAndFilterPersistConfig = {
   key: "searchAndFilter",
   storage: storageSession,
 };
 
+const persistedCreateSelectionReducer = persistReducer(
+  createSelectionPersistConfig,
+  createSelectionReducer
+);
 
 const persistedPreviewReducer = persistReducer(
   previewPersistConfig,
@@ -53,6 +62,7 @@ export const store = configureStore({
   reducer: {
     preview: persistedPreviewReducer,
     uploadSelection: persistedUploadSelectionReducer,
+    createSelection: persistedCreateSelectionReducer,
     searchAndFilter: persistedSearchAndFilterReducer,
 
     [api.reducerPath]: api.reducer,

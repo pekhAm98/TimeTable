@@ -22,8 +22,7 @@ export async function proxy(request: NextRequest) {
 
   const isPublicPath = PUBLIC_PATHS.has(pathname);
 
-  const apiBase =
-    process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const apiBase = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
 
   try {
     const sessionResponse = await fetch(

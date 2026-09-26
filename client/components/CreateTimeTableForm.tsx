@@ -1,20 +1,15 @@
 "use client";
 import { useDispatch, useSelector } from "react-redux";
-import { setPreviewData, setPreviewSource } from "../store/previewSlice";
-import { useDropzone } from "react-dropzone";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { UploadCloud, FileSpreadsheet, TrainFront, CalendarDays,CalendarPlus } from "lucide-react";
+import { FileSpreadsheet, TrainFront, CalendarDays,CalendarPlus } from "lucide-react";
 import { METRO_LINES, RUN_DAY_TYPES } from "@/constants/maps";
 import { useState } from "react";
-import { setLineId, setUploadName, setRunDayType } from "@/store/uploadSelectionSlice";
-import { useGetUploadedPreviewMutation } from "@/store/api/timetableApi";
-
+import { setCreationName, setCreationLineId, setCreationRunDayType } from "@/store/createSelectionSlice";
 type CreateTimeTableForm = {
   name: string;
   line: number;
   day: number;
-  file: File | null;
 };
 
 type ApiErrorShape = {
@@ -23,6 +18,9 @@ type ApiErrorShape = {
   };
   error?: string;
 };
+
+
+
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -45,100 +43,28 @@ function getApiErrorMessage(error: unknown): string {
 export default function CreateTimeTableForm() {
   const router = useRouter();
   const dispatch = useDispatch();
-  const uploadSelection = useSelector((state: any) => state.uploadSelection);
-  const [file, setFile] = useState<File | null>(null);
+  const createSelection = useSelector((state: any) => state.createSelection);
+  console.log("CURRENT REDUX STATE:", createSelection);
 
   
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-     accept: {
-    // CSV
-    "text/csv": [".csv"],
-    "application/vnd.ms-excel": [".xls", ".csv"], // EXCELL + CSV
-    "text/plain": [".csv"],
 
- 
-
-    // Excel (.xlsx)
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-      ".xlsx",
-    ],
-  },
-    multiple: false,
-    noClick: true,
-    onDrop: (acceptedFiles) => {
-      const file = acceptedFiles[0];
-
-      if (file) {
-        setFile(file);
-      }
-    },
-    onDropRejected: () => {
-      toast.error("Only CSV files are allowed");
-    },
-  });
-  const [getUploadedPreview] = useGetUploadedPreviewMutation();
-  
-  //UPLOAD
-  const handleUpload = async () => {
-    if (!uploadSelection.uploadName) {
-      toast.error("Upload name is required");
-      return;
-    }
-
-    if (!uploadSelection.lineId) {
-      toast.error("Please select a line");
-      return;
-    }
-
-    if (!uploadSelection.runDayType) {
-      toast.error("Please select run day");
-      return;
-    }
-
-    if (!file) {
-      toast.error("CSV file is required");
-      return;
-    }
-
-    try {
-      const data = new FormData();
-
-      data.append("file", file);
-
-      data.append("uploadName", uploadSelection.uploadName);
-
-      data.append("lineId", uploadSelection.lineId.toString());
-
-      data.append("runDayType", uploadSelection.runDayType.toString());
-
-      toast.loading("Uploading timetable...", {
-        id: "upload",
-      });
-      const result = await getUploadedPreview(data).unwrap();
-
-      if (!result?.success || !result?.data) {
-        throw new Error("Upload failed. Server did not return preview data.");
-      }
-
-      toast.success("Timetable preview generated", {
-        id: "upload",
-      });
-
-      // temporary
-      console.log(result);
-      //store the preview in redux
-      //store the preview in redux
-
-      dispatch(setPreviewData(result.data));
-      dispatch(setPreviewSource("UPLOAD"));
-
-      router.push("/preview");
-    } catch (error) {
-      toast.error(getApiErrorMessage(error), {
-        id: "upload",
-      });
-    }
+  const handleCreateTimetable = async () => {
+  const data: CreateTimeTableForm = {
+    name: createSelection.creationName,
+    line: createSelection.lineId,
+    day: createSelection.runDayType,
   };
+   if(!createSelection.creationName || !createSelection.lineId || !createSelection.runDayType) {
+    toast.error("Please fill all fields");
+    return;
+   }
+   console.log("Creating timetable with data:", data);
+   toast.success(`Redirecting to create timetable page....`);
+   router.push("/createtimetable"); 
+
+};
+
+
 
   return (
     <div
@@ -192,8 +118,11 @@ export default function CreateTimeTableForm() {
 
             <input
               placeholder="Enter upload name"
-              value={uploadSelection.uploadName}
-              onChange={(e) => dispatch(setUploadName(e.target.value))}
+              value={createSelection.creationName}
+              onChange={(e) => {  
+                console.log("Input value:", e.target.value);
+                dispatch(setCreationName(e.target.value));
+              }}
               spellCheck={false}
               autoCorrect="off"
               autoCapitalize="off"
@@ -225,8 +154,10 @@ export default function CreateTimeTableForm() {
             <TrainFront size={20} className="text-emerald-400" />
 
             <select
-              value={uploadSelection.lineId ?? ""}
-              onChange={(e) => dispatch(setLineId(Number(e.target.value)))}
+              value={createSelection.lineId ?? ""}
+              onChange={(e) => {
+                console.log("Selected line ID:", e.target.value);
+                dispatch(setCreationLineId(Number(e.target.value)))}}
               className="
             w-full
             bg-transparent
@@ -264,8 +195,11 @@ export default function CreateTimeTableForm() {
             <CalendarDays size={20} className="text-emerald-400" />
 
             <select
-              value={uploadSelection.runDayType ?? ""}
-              onChange={(e) => dispatch(setRunDayType(Number(e.target.value)))}
+              value={createSelection.runDayType ?? ""}
+              onChange={(e) => {
+                console.log("Selected run day ID:", e.target.value);
+                dispatch(setCreationRunDayType(Number(e.target.value)))
+              }}
               className="
                 w-full
                 bg-transparent
@@ -288,89 +222,7 @@ export default function CreateTimeTableForm() {
 
         {/* CSV Upload */}
         {/* CSV Upload */}
-        <div {...getRootProps()}>
-          <label className="mb-2 block text-sm text-emerald-400">CSV File</label>
-
-          <div
-            className="
-      flex cursor-pointer
-      flex-col items-center justify-center
-      rounded-xl
-      border border-dashed
-      border-emerald-500/50
-      bg-emerald-500/5
-      py-8
-      transition
-      hover:bg-emerald-500/10
-    "
-          >
-            {file ? (
-              <>
-                <FileSpreadsheet
-                  size={40}
-                  className="
-              mb-3
-              text-emerald-400
-              drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]
-            "
-                />
-
-                <p className="text-white">{file.name}</p>
-
-                <p className="mt-1 text-sm text-slate-400">{(file.size / 1024).toFixed(2)} KB</p>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFile(null);
-                  }}
-                  className="
-              mt-3
-              rounded-lg
-              bg-red-500/20
-              px-3
-              py-1
-              text-sm
-              text-red-400
-              hover:bg-red-500/30
-            "
-                >
-                  Remove
-                </button>
-              </>
-            ) : (
-              <>
-                <UploadCloud size={35} className="mb-3 text-emerald-400" />
-
-                <p className="text-sm text-slate-300">{isDragActive ? "Drop CSV file here" : "Drag & drop CSV file"}</p>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    open();
-                  }}
-                  className="
-              mt-3
-              rounded-lg
-              bg-emerald-500/20
-              px-4
-              py-2
-              text-sm
-              text-emerald-400
-              hover:bg-emerald-500/30
-            "
-                >
-                  Browse Files
-                </button>
-              </>
-            )}
-
-            <input {...getInputProps()} />
-          </div>
-        </div>
-
+       
         {/* Submit */}
         <button
           className="
@@ -385,10 +237,10 @@ export default function CreateTimeTableForm() {
             hover:bg-emerald-300
             shadow-[0_0_30px_rgba(16,185,129,0.45)]
           "
-          onClick={handleUpload}
+          onClick={handleCreateTimetable}
         >
-          <UploadCloud size={20} />
-          Upload & Preview
+          <CalendarPlus size={20} />
+          Create Timetable
         </button>
       </div>
     </div>

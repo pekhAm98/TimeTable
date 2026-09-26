@@ -22,14 +22,14 @@ const createSelectionSlice = createSlice({
     setCreationName(state, action: PayloadAction<string>) {
       state.creationName = action.payload;
     },
-    setLineId(state, action: PayloadAction<number | null>) {
+    setCreationLineId(state, action: PayloadAction<number | null>) {
       state.lineId = action.payload;
     },
-    setRunDayType(state, action: PayloadAction<number | null>) {
+    setCreationRunDayType(state, action: PayloadAction<number | null>) {
       state.runDayType = action.payload;
     },
   },
 });
 
-export const { setCreationName, setLineId, setRunDayType } = createSelectionSlice.actions;
+export const { setCreationName, setCreationLineId, setCreationRunDayType } = createSelectionSlice.actions;
 export default createSelectionSlice.reducer;

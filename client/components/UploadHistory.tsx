@@ -62,28 +62,55 @@ export default function UploadHistory() {
 
   const history = previews?.data || [];
   const searchAndFilter = useSelector((state: any) => state.searchAndFilter);
-  const filteredHistory = useMemo(() => {
-    if (!previews?.data) {
-      return [];
-    }
 
-    const normalizedSearchQuery = String(searchAndFilter.filterOptions.searchQuery ?? "")
-      .trim()
-      .toLowerCase();
-    const normalizedLineId = Number(searchAndFilter.filterOptions.lineId ?? 0);
-    const normalizedRunDayType = Number(searchAndFilter.filterOptions.runDayType ?? 0);
+  const data = previews?.data;
 
-    return previews.data.filter((upload) => {
-      const uploadName = String(upload.upload_name ?? "").toLowerCase();
-      const uploadLineId = Number(upload.line_id ?? 0);
-      const uploadRunDayType = Number(upload.run_day_type ?? 0);
-      const matchesSearch = normalizedSearchQuery ? uploadName.includes(normalizedSearchQuery) : true;
-      const matchesLineId = normalizedLineId > 0 ? uploadLineId === normalizedLineId : true;
-      const matchesRunDayType = normalizedRunDayType > 0 ? uploadRunDayType === normalizedRunDayType : true;
+const filteredHistory = useMemo(() => {
+  if (!data) {
+    return [];
+  }
 
-      return matchesSearch && matchesLineId && matchesRunDayType;
-    });
-  }, [previews?.data, searchAndFilter.filterOptions.searchQuery, searchAndFilter.filterOptions.lineId, searchAndFilter.filterOptions.runDayType]);
+  const normalizedSearchQuery = String(
+    searchAndFilter.filterOptions.searchQuery ?? ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const normalizedLineId = Number(
+    searchAndFilter.filterOptions.lineId ?? 0
+  );
+
+  const normalizedRunDayType = Number(
+    searchAndFilter.filterOptions.runDayType ?? 0
+  );
+
+  return data.filter((upload) => {
+    const uploadName = String(upload.upload_name ?? "").toLowerCase();
+    const uploadLineId = Number(upload.line_id ?? 0);
+    const uploadRunDayType = Number(upload.run_day_type ?? 0);
+
+    const matchesSearch = normalizedSearchQuery
+      ? uploadName.includes(normalizedSearchQuery)
+      : true;
+
+    const matchesLineId =
+      normalizedLineId > 0
+        ? uploadLineId === normalizedLineId
+        : true;
+
+    const matchesRunDayType =
+      normalizedRunDayType > 0
+        ? uploadRunDayType === normalizedRunDayType
+        : true;
+
+    return matchesSearch && matchesLineId && matchesRunDayType;
+  });
+}, [
+  data,
+  searchAndFilter.filterOptions.searchQuery,
+  searchAndFilter.filterOptions.lineId,
+  searchAndFilter.filterOptions.runDayType,
+]);
 
   // Handle click on an upload item to fetch its preview details and navigate to the preview page
 

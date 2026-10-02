@@ -1,4 +1,4 @@
-import { raw, type Request, type Response } from "express";
+import {  type Request, type Response } from "express";
 import { generatePreview } from "../services/timetable.service.js";
 import { getConnection } from "../config/db.js";
 import oracledb from "oracledb";

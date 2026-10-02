@@ -43,8 +43,10 @@ app.all("/api/auth/*splat", toNodeHandler(auth));
 
 // Test the connection
 
-app.use("/api/timetables", requireAuth, timetableRoutes);
-
+//AUTHORIZED ROUTES
+//app.use("/api/timetables", requireAuth, timetableRoutes);
+//DEV TEST ROUTES
+app.use("/api/timetables", timetableRoutes);
 
 
 const server = app.listen(PORT, () => {

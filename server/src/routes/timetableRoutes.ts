@@ -1,7 +1,7 @@
 import {Router} from "express";
 import { previewTimetable, getPreviews, getPreviewById, patchPreviewById ,saveConfirmedPreview , deletePreviewById ,publishPreview , timeTableLogs } from "../controllers/timetableController.js";
-import { getAllLines, getLineStations,getServicePatterns
-//,getJunctions,createServicePatterns,updateServicePatterns,deleteServicePatterns
+import { getAllLines, getLineStations,getServicePatterns,createServicePatterns,updateServicePatterns,deleteServicePatterns
+//,getJunctions
 } from "../controllers/creationController.js";
 
 
@@ -22,8 +22,8 @@ router.get("/logs", timeTableLogs);
 router.get("/lines", getAllLines);
 router.get("/lines/:lineId/stations", getLineStations);
 //router.get("/junctions", getJunctions)
-router.route("/lines/:lineId/patterns").get(getServicePatterns)
-//.post(createServicePatterns).delete(deleteServicePatterns).put(updateServicePatterns);
+router.route("/lines/:lineId/patterns").get(getServicePatterns).post(createServicePatterns).put(updateServicePatterns).delete(deleteServicePatterns);
+//
 
 export default router;
 

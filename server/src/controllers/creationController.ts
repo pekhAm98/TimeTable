@@ -64,7 +64,7 @@ const getLineStations = async (req: Request, res: Response) => {
   } finally {
     if (connection) {
       try {
-        await connection.release();
+        await connection.close();
       } catch (error) {
         console.error(error);
       }
@@ -110,7 +110,7 @@ const getServicePatterns = async (req: Request, res: Response) => {
   } finally {
     if (connection) {
       try {
-        await connection.release();
+        await connection.close();
       } catch (error) {
         console.error(error);
       }
@@ -119,7 +119,7 @@ const getServicePatterns = async (req: Request, res: Response) => {
 };
 
 const createServicePatterns = async (req: Request, res: Response) => {
-  const {lineId} = req.params;
+  const { lineId } = req.params;
   const { direction, serviceName, TRAVEL_TIMES } = req.body;
   let connection: oracledb.Connection | undefined;
   if (!lineId || !direction || !serviceName) {
@@ -158,7 +158,7 @@ const createServicePatterns = async (req: Request, res: Response) => {
       res.status(404).json({ message: "Line Stations not found" });
       return;
     }
-    if (TRAVEL_TIMES.length !== count - 1 || !Array.isArray(TRAVEL_TIMES) || !Array.isArray(TRAVEL_TIMES)) {
+    if (!Array.isArray(TRAVEL_TIMES) || TRAVEL_TIMES.length !== count - 1) {
       res.status(400).json({
         message: "Invalid travel times arry length",
       });
@@ -178,7 +178,7 @@ const createServicePatterns = async (req: Request, res: Response) => {
     }
     await connection.execute(query, [lineId, direction.toString().toUpperCase(), serviceName, JSON.stringify(TRAVEL_TIMES)]);
     await connection.commit(); // Commit the transaction
-    console.log
+    console.log;
     res.status(201).json({ message: "Service pattern created successfully" });
   } catch (error) {
     console.error("❌ createServicePatterns error:", error);
@@ -189,7 +189,7 @@ const createServicePatterns = async (req: Request, res: Response) => {
   } finally {
     if (connection) {
       try {
-        await connection.release();
+        await connection.close();
       } catch (error) {
         console.error(error);
       }
@@ -198,13 +198,8 @@ const createServicePatterns = async (req: Request, res: Response) => {
 };
 
 const updateServicePatterns = async (req: Request, res: Response) => {
-  const {lineId} = req.params;
-  const {
-    direction,
-    serviceNameOld,
-    serviceNameNew,
-    TRAVEL_TIMES
-  } = req.body;
+  const { lineId } = req.params;
+  const { direction, serviceNameOld, serviceNameNew, TRAVEL_TIMES } = req.body;
 
   let connection: oracledb.Connection | undefined;
 
@@ -220,11 +215,7 @@ const updateServicePatterns = async (req: Request, res: Response) => {
         AND PATTERN_NAME = :serviceNameOld
     `;
 
-    const result = await connection.execute(
-      query,
-      [lineId, direction, serviceNameOld],
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
+    const result = await connection.execute(query, [lineId, direction, serviceNameOld], { outFormat: oracledb.OUT_FORMAT_OBJECT });
 
     if (!result.rows || result.rows.length === 0) {
       return res.status(404).json({
@@ -254,15 +245,7 @@ const updateServicePatterns = async (req: Request, res: Response) => {
       WHERE PATTERN_ID = :serviceId
     `;
 
-    const updateResult = await connection.execute(
-      updateQuery,
-      [
-        serviceNameNew,
-        direction,
-        JSON.stringify(TRAVEL_TIMES),
-        serviceId
-      ]
-    );
+    const updateResult = await connection.execute(updateQuery, [serviceNameNew, direction, JSON.stringify(TRAVEL_TIMES), serviceId]);
 
     if (updateResult.rowsAffected !== 1) {
       return res.status(404).json({
@@ -278,7 +261,6 @@ const updateServicePatterns = async (req: Request, res: Response) => {
       message: "Service pattern updated successfully",
       success: true,
     });
-
   } catch (e) {
     console.error(e);
 
@@ -286,7 +268,6 @@ const updateServicePatterns = async (req: Request, res: Response) => {
       message: "Internal server error",
       success: false,
     });
-
   } finally {
     if (connection) {
       try {
@@ -302,9 +283,9 @@ const deleteServicePatterns = async (req: Request, res: Response) => {
   let connection;
   try {
     connection = await getConnection();
-    const {lineId} = req.params;
-    const {direction,patternName } = req.body;
-    if(!lineId || !direction || !patternName){
+    const { lineId } = req.params;
+    const { direction, patternName } = req.body;
+    if (!lineId || !direction || !patternName) {
       return res.status(400).json({
         message: "Please provide Line Id,Direction and Pattern Name",
         success: false,
@@ -312,29 +293,30 @@ const deleteServicePatterns = async (req: Request, res: Response) => {
     }
     const result = await connection.execute(
       `SELECT * FROM TIMETABLE_SERVICE_PATTERN WHERE LINE_ID = :lineId AND DIRECTION = :direction AND PATTERN_NAME = :patternName`,
-      [lineId,direction,patternName],
-      { outFormat: oracledb.OUT_FORMAT_OBJECT})
-      
-      if (!result.rows || result.rows.length === 0) {
-        return res.status(404).json({message:"Service Pattern not found",success:false})
-      }
-      const deltePatternId = (result.rows[0] as any).PATTERN_ID;
-      const deletePattern = await connection.execute(
-        `DELETE FROM TIMETABLE_SERVICE_PATTERN WHERE PATTERN_ID = :patternId`,
-        [deltePatternId],{autoCommit:true , outFormat: oracledb.OUT_FORMAT_OBJECT})
-        if(deletePattern.rowsAffected === 1){
-          return res.status(200).json({
-            message:"Service Pattern deleted successfully",
-          })
-        }
+      [lineId, direction, patternName],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
+    );
+
+    if (!result.rows || result.rows.length === 0) {
+      return res.status(404).json({ message: "Service Pattern not found", success: false });
+    }
+    const deltePatternId = (result.rows[0] as any).PATTERN_ID;
+    const deletePattern = await connection.execute(`DELETE FROM TIMETABLE_SERVICE_PATTERN WHERE PATTERN_ID = :patternId`, [deltePatternId], {
+      autoCommit: true,
+      outFormat: oracledb.OUT_FORMAT_OBJECT,
+    });
+    if (deletePattern.rowsAffected === 1) {
+      return res.status(200).json({
+        message: "Service Pattern deleted successfully",
+      });
+    }
   } catch (e) {
     console.error(e);
     return res.status(500).json({
       message: "Internal server error",
       error: e,
     });
-  }
-  finally {
+  } finally {
     if (connection) {
       try {
         await connection.close();
@@ -344,5 +326,6 @@ const deleteServicePatterns = async (req: Request, res: Response) => {
     }
   }
 };
+
 export { getAllLines, getLineStations, getServicePatterns, createServicePatterns, updateServicePatterns, deleteServicePatterns };
 //getAllLines, getLineStations,getJunctions,getServicePatterns,createServicePatterns,updateServicePatterns,deleteServicePatterns

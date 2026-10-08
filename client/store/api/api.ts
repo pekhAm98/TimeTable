@@ -7,6 +7,12 @@ export const api = createApi({
     baseUrl: process.env.NEXT_PUBLIC_API_URL + "/api",
     credentials: "include",
   }),
-  tagTypes: ["Preview","PreviewHistory"],
+  tagTypes: [
+  "Preview",
+  "PreviewHistory",
+  "TimetableLines",
+  "TimetableStations",
+  "ServicePatterns",
+],
   endpoints: () => ({}),
 });

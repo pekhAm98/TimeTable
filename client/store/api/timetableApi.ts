@@ -11,8 +11,37 @@ import type { TimetableRow } from "../previewSlice";
 // // Get one saved preview by upload ID
 // GET    /api/timetables/previews/:id
 
-
 //router.post("/previews/save", saveConfirmedPreview);
+type Direction = "UP" | "DOWN";
+
+type Line = {
+  id: number;
+  name: string;
+};
+
+type RawStation = {
+  STATION_CODE: string;
+  STATION_ID: number;
+};
+
+type Station = {
+  code: string;
+  id: number;
+};
+
+type RawServicePattern = {
+  PATTERN_ID: number;
+  LINE_ID: number;
+  DIRECTION: Direction;
+  PATTERN_NAME: string;
+  TRAVEL_TIMES: string[];
+};
+
+type ServicePattern = {
+  name: string;
+  direction: Direction;
+  travelTimes: string[];
+};
 type PreviewSummary = {
   upload_id: number;
   upload_name: string;
@@ -20,7 +49,7 @@ type PreviewSummary = {
   run_day_type: string;
   created_by: string;
   created_at: string;
-  status: string; 
+  status: string;
 };
 type TimeTableLogResponse = {
   actionType: string;
@@ -113,7 +142,6 @@ type PreviewDetailResponse = {
     runDayType: number;
     timetable: TimetableRow[];
     status: string;
-
   };
 };
 
@@ -124,7 +152,9 @@ function toValidRunDayType(value: unknown): number {
     return numeric;
   }
 
-  const text = String(value ?? "").trim().toUpperCase();
+  const text = String(value ?? "")
+    .trim()
+    .toUpperCase();
 
   if (text === "WEEKDAY") return 1;
   if (text === "SATURDAY") return 2;
@@ -171,9 +201,7 @@ function parseTimetableData(raw: unknown): { lineId?: number; runDayType?: numbe
 
 function normalizePreviewDetail(row: RawPreviewRow): PreviewDetailResponse["data"] {
   const parsedFromTimetableData = parseTimetableData(row.timetable_data ?? row.TIMETABLE_DATA);
-  const derivedTimetable = Array.isArray(row.timetable ?? row.TIMETABLE)
-    ? (row.timetable ?? row.TIMETABLE ?? [])
-    : parsedFromTimetableData.timetable;
+  const derivedTimetable = Array.isArray(row.timetable ?? row.TIMETABLE) ? (row.timetable ?? row.TIMETABLE ?? []) : parsedFromTimetableData.timetable;
 
   const derivedLineId = Number(row.lineId ?? row.line_id ?? row.LINE_ID ?? parsedFromTimetableData.lineId ?? 0);
   const derivedRunDayType = toValidRunDayType(row.runDayType ?? row.run_day_type ?? row.RUN_DAY_TYPE ?? parsedFromTimetableData.runDayType ?? 0);
@@ -203,9 +231,6 @@ type UploadedPreviewResponse = {
 
 export const timetableApi = api.injectEndpoints({
   endpoints: (builder) => ({
-
-
-
     getUploadedPreview: builder.mutation<UploadedPreviewResponse, FormData>({
       query: (formData: FormData) => ({
         url: "/timetables/preview",
@@ -215,7 +240,8 @@ export const timetableApi = api.injectEndpoints({
       invalidatesTags: ["Preview"],
     }),
 
-    getAllPreviews: builder.query<GetAllPreviewsResponse, void>({ ////DONE
+    getAllPreviews: builder.query<GetAllPreviewsResponse, void>({
+      ////DONE
       query: () => "/timetables/previews/all",
       transformResponse: (response: { success: boolean; data: RawPreviewSummary[] }): GetAllPreviewsResponse => ({
         success: Boolean(response?.success),
@@ -227,8 +253,8 @@ export const timetableApi = api.injectEndpoints({
       },
     }),
 
-
-    getPreviewById: builder.query<PreviewDetailResponse, number>({ ///DONE                                  
+    getPreviewById: builder.query<PreviewDetailResponse, number>({
+      ///DONE
       query: (id: number) => `/timetables/previews/${id}`,
       transformResponse: (response: { success: boolean; data: RawPreviewRow }): PreviewDetailResponse => ({
         success: Boolean(response?.success),
@@ -270,11 +296,7 @@ export const timetableApi = api.injectEndpoints({
           //
         }
       },
-      invalidatesTags: (result, error, id) => [
-        { type: "Preview", id },
-        { type: "Preview", id: "LIST" },
-        "PreviewHistory"
-      ],
+      invalidatesTags: (result, error, id) => [{ type: "Preview", id }, { type: "Preview", id: "LIST" }, "PreviewHistory"],
     }),
 
     getTimeTableLogs: builder.query<GetTimeTableLogsResponse, { page: number; limit: number }>({
@@ -300,7 +322,56 @@ export const timetableApi = api.injectEndpoints({
           console.error("[publishPreview] failed", { id, error });
         }
       },
-      invalidatesTags: ["Preview" ,"PreviewHistory" ],
+      invalidatesTags: ["Preview", "PreviewHistory"],
+    }),
+
+    //CREATION APIS
+    getAllLines: builder.query<Line[], void>({
+      query: () => "/timetables/lines",
+
+      transformResponse: (response: Line[]) => {
+        return response;
+      },
+      providesTags: ["TimetableLines"],
+    }),
+
+    getLineStations: builder.query<Station[],{lineId: number;direction: Direction}>({
+        query: ({ lineId, direction }) => ({
+        url: `/timetables/lines/${lineId}/stations`,
+        params: {
+          direction,
+        },
+      }),
+
+      transformResponse: (response: RawStation[]) => {
+        return response.map((station) => ({
+          code: station.STATION_CODE,
+          id: station.STATION_ID,
+        }));
+      },
+      providesTags: ["TimetableStations"]
+    }),
+
+    getServicePatterns: builder.query<ServicePattern[],
+      {
+        lineId: number;
+        direction: Direction;}
+    >({
+      query: ({ lineId, direction }) => ({
+        url: `/timetables/lines/${lineId}/patterns`,
+        params: {
+          direction,
+        },
+      }),
+
+      transformResponse: (response: RawServicePattern[]) => {
+        return response.map((pattern) => ({
+          name: pattern.PATTERN_NAME,
+          direction: pattern.DIRECTION,
+          travelTimes: pattern.TRAVEL_TIMES,
+        }));
+      },
+          providesTags: ["ServicePatterns"]
     }),
   }),
 });
@@ -314,4 +385,8 @@ export const {
   useDeletePreviewByIdMutation,
   usePublishPreviewMutation,
   useGetTimeTableLogsQuery,
+  //CREATION
+  useGetAllLinesQuery,
+  useGetLineStationsQuery,
+  useGetServicePatternsQuery
 } = timetableApi;

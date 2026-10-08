@@ -1,0 +1,1 @@
+export  const GLOBAL_HALT = "00:00:20";

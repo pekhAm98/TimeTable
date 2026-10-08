@@ -4,6 +4,7 @@ import previewReducer from "./previewSlice";
 import uploadSelectionReducer from "./uploadSelectionSlice";
 import searchAndFilterReducer from "./searchAndFilterSlice";
 import createSelectionReducer from "./createSelectionSlice";
+import timetableReducer from "./timetableSlice";
 import { api } from "./api/api";
 
 import {
@@ -39,6 +40,12 @@ const searchAndFilterPersistConfig = {
   storage: storageSession,
 };
 
+
+const timetablePersistConfig = {
+  key: "timetable",
+  storage: storageSession,
+};
+
 const persistedCreateSelectionReducer = persistReducer(
   createSelectionPersistConfig,
   createSelectionReducer
@@ -58,12 +65,18 @@ const persistedSearchAndFilterReducer = persistReducer(
   searchAndFilterPersistConfig,
   searchAndFilterReducer
 );
+
+const persistedTimetableReducer = persistReducer(
+  timetablePersistConfig,
+  timetableReducer
+);
 export const store = configureStore({
   reducer: {
     preview: persistedPreviewReducer,
     uploadSelection: persistedUploadSelectionReducer,
     createSelection: persistedCreateSelectionReducer,
     searchAndFilter: persistedSearchAndFilterReducer,
+    timetable: persistedTimetableReducer,
 
     [api.reducerPath]: api.reducer,
   },

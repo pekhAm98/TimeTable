@@ -2,13 +2,17 @@
 
 import React, { useMemo, useState } from "react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { LINE_ARROW_COLORS } from "@/constants/maps";
+import TimeTableGrid from "@/components/ui/creationComponents/TimeTableGrid";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+import { useDispatch, useSelector } from "react-redux";
+import type { RootState, AppDispatch } from "@/store";
+import { addTrains, clearTrains } from "@/store/timetableSlice";
+import { GLOBAL_HALT } from "@/constants/variables";
+import { toast } from "sonner";
+
+import { useGetAllLinesQuery, useGetLineStationsQuery, useGetServicePatternsQuery } from "@/store/api/timetableApi";
 
 /* =========================================================
    TYPES
@@ -16,30 +20,21 @@ import {
 
 type Direction = "UP" | "DOWN";
 
-type Station = {
+export type Station = {
   code: string;
   id: number;
 };
 
-type ServicePattern = {
-  name: string;
-  direction: Direction;
-  travelTimes: string[];
-};
+// type ServicePattern = {
+//   name: string;
+//   direction: Direction;
+//   travelTimes: string[];
+// };
 
-type Line = {
-  id: number;
-  name: string;
-  stations: {
-    UP: Station[];
-    DOWN: Station[];
-  };
-  patterns: {
-    UP: ServicePattern[];
-    DOWN: ServicePattern[];
-  };
-};
-
+// type Line = {
+//   id: number;
+//   name: string;
+// };
 
 export type TimetableTrain = {
   trainId: number;
@@ -47,164 +42,16 @@ export type TimetableTrain = {
   patternName: string;
   startStation: string;
   endStation: string;
-
   times: {
     stationCode: string;
     arrival: string | null;
     departure: string | null;
   }[];
 };
-/* =========================================================
-   MOCK DATA
-========================================================= */
-
-const MOCK_LINES: Line[] = [
-  {
-    id: 2,
-    name: "Line 2",
-
-    stations: {
-      UP: [
-        { code: "KHMD", id: 1 },
-        { code: "KKSK", id: 2 },
-        { code: "KJNN", id: 3 },
-        { code: "KSJR", id: 4 },
-        { code: "KKSO", id: 5 },
-      ],
-
-      DOWN: [
-        { code: "KKSO", id: 5 },
-        { code: "KSJR", id: 4 },
-        { code: "KJNN", id: 3 },
-        { code: "KKSK", id: 2 },
-        { code: "KHMD", id: 1 },
-      ],
-    },
-
-    patterns: {
-      UP: [
-        {
-          name: "First Train",
-          direction: "UP",
-          travelTimes: [
-            "00:02:30",
-            "00:02:30",
-            "00:03:00",
-            "00:03:20",
-          ],
-        },
-        {
-          name: "Regular",
-          direction: "UP",
-          travelTimes: [
-            "00:02:40",
-            "00:02:20",
-            "00:02:30",
-            "00:02:30",
-          ],
-        },
-        {
-          name: "Evening Service",
-          direction: "UP",
-          travelTimes: [
-            "00:03:20",
-            "00:02:30",
-            "00:02:00",
-            "00:02:00",
-          ],
-        },
-      ],
-
-      DOWN: [
-        {
-          name: "Regular",
-          direction: "DOWN",
-          travelTimes: [
-            "00:02:20",
-            "00:02:20",
-            "00:02:20",
-            "00:02:40",
-          ],
-        },
-        {
-          name: "Evening Service",
-          direction: "DOWN",
-          travelTimes: [
-            "00:03:20",
-            "00:02:30",
-            "00:02:00",
-            "00:02:00",
-          ],
-        },
-      ],
-    },
-  },
-
-  {
-    id: 3,
-    name: "Line 3",
-
-    stations: {
-      UP: [
-        { code: "ST01", id: 101 },
-        { code: "ST02", id: 102 },
-        { code: "ST03", id: 103 },
-        { code: "ST04", id: 104 },
-        { code: "ST05", id: 105 },
-        { code: "ST06", id: 106 },
-        { code: "ST07", id: 107 },
-      ],
-
-      DOWN: [
-        { code: "ST07", id: 107 },
-        { code: "ST06", id: 106 },
-        { code: "ST05", id: 105 },
-        { code: "ST04", id: 104 },
-        { code: "ST03", id: 103 },
-        { code: "ST02", id: 102 },
-        { code: "ST01", id: 101 },
-      ],
-    },
-
-    patterns: {
-      UP: [
-        {
-          name: "Regular",
-          direction: "UP",
-          travelTimes: [
-            "00:02:40",
-            "00:02:20",
-            "00:02:30",
-            "00:02:30",
-            "00:02:10",
-            "00:03:10",
-          ],
-        },
-      ],
-
-      DOWN: [
-        {
-          name: "Regular",
-          direction: "DOWN",
-          travelTimes: [
-            "00:02:20",
-            "00:02:20",
-            "00:02:20",
-            "00:02:40",
-            "00:02:20",
-            "00:03:20",
-          ],
-        },
-      ],
-    },
-  },
-];
 
 /* =========================================================
    CONSTANTS
 ========================================================= */
-
-const GLOBAL_HALT = "00:20:00";
 
 /* =========================================================
    HELPERS
@@ -220,6 +67,32 @@ const formatTravelTime = (time: string) => {
   return `${parts[1]}:${parts[2]}`;
 };
 
+const timeToSeconds = (time: string) => {
+  const [hours, minutes, seconds = "0"] = time.split(":").map(Number);
+
+  return hours * 3600 + minutes * 60 + Number(seconds);
+};
+
+const secondsToTime = (totalSeconds: number) => {
+  const secondsInDay = 24 * 60 * 60;
+
+  const normalizedSeconds = ((totalSeconds % secondsInDay) + secondsInDay) % secondsInDay;
+
+  const hours = Math.floor(normalizedSeconds / 3600);
+  const minutes = Math.floor((normalizedSeconds % 3600) / 60);
+  const seconds = normalizedSeconds % 60;
+
+  return [String(hours).padStart(2, "0"), String(minutes).padStart(2, "0"), String(seconds).padStart(2, "0")].join(":");
+};
+
+const addTime = (time: string, seconds: number) => secondsToTime(timeToSeconds(time) + seconds);
+
+const durationToSeconds = (duration: string) => {
+  const [hours, minutes, seconds] = duration.split(":").map(Number);
+
+  return hours * 3600 + minutes * 60 + seconds;
+};
+
 /* =========================================================
    PAGE
 ========================================================= */
@@ -230,11 +103,7 @@ const CreateTimeTable = () => {
   --------------------------------------------------------- */
 
   const [lineId, setLineId] = useState("");
-
-  const [direction, setDirection] = useState<
-    Direction | ""
-  >("");
-
+  const [direction, setDirection] = useState<Direction | "">("");
   const [patternName, setPatternName] = useState("");
 
   /* ---------------------------------------------------------
@@ -242,100 +111,58 @@ const CreateTimeTable = () => {
   --------------------------------------------------------- */
 
   const [startStation, setStartStation] = useState("");
-
   const [endStation, setEndStation] = useState("");
 
   /* ---------------------------------------------------------
      TRAIN CONFIGURATION
   --------------------------------------------------------- */
 
-  const [timetableMode, setTimetableMode] =
-    useState<"count" | "timeframe">("count");
+  const [timetableMode, setTimetableMode] = useState<"count" | "timeframe">("count");
 
   const [trainCount, setTrainCount] = useState(5);
-
   const [startTime, setStartTime] = useState("08:00");
-
   const [endTime, setEndTime] = useState("12:00");
-
   const [frequency, setFrequency] = useState("20");
 
-  const [trains, setTrains] = useState<TimetableTrain[]>([]);
+  const trains = useSelector((state: RootState) => state.timetable.trains);
 
-  /* =========================================================
-     SELECTED LINE
-  ========================================================= */
+  const dispatch = useDispatch<AppDispatch>();
+
+  /* ---------------------------------------------------------
+     API DATA
+  --------------------------------------------------------- */
+
+  const { data: lines = [] } = useGetAllLinesQuery();
+
+  const { data: stations = [] } = useGetLineStationsQuery({ lineId: Number(lineId), direction: direction as Direction }, { skip: !lineId || !direction });
+
+  const { data: patterns = [] } = useGetServicePatternsQuery({ lineId: Number(lineId), direction: direction as Direction }, { skip: !lineId || !direction });
 
   const selectedLine = useMemo(() => {
-    return MOCK_LINES.find(
-      (line) => String(line.id) === lineId
-    );
-  }, [lineId]);
-
-  /* =========================================================
-     STATIONS
-
-     Backend already returns them in the correct direction.
-     We therefore DO NOT reverse DOWN here.
-  ========================================================= */
-
-  const stations = useMemo(() => {
-    if (!selectedLine || !direction) {
-      return [];
-    }
-
-    return selectedLine.stations[direction];
-  }, [selectedLine, direction]);
-
-  /* =========================================================
-     SERVICE PATTERNS
-  ========================================================= */
-
-  const patterns = useMemo(() => {
-    if (!selectedLine || !direction) {
-      return [];
-    }
-
-    return selectedLine.patterns[direction];
-  }, [selectedLine, direction]);
-
-  /* =========================================================
-     SELECTED SERVICE PATTERN
-  ========================================================= */
+    return lines.find((line) => String(line.id) === lineId);
+  }, [lines, lineId]);
 
   const selectedPattern = useMemo(() => {
-    if (!selectedLine || !direction || !patternName) {
-      return null;
-    }
+    if (!patternName) return null;
 
-    return selectedLine.patterns[direction].find(
-      (pattern) => pattern.name === patternName
-    );
-  }, [
-    selectedLine,
-    direction,
-    patternName,
-  ]);
+    return patterns.find((pattern) => pattern.name === patternName) ?? null;
+  }, [patterns, patternName]);
 
   /* =========================================================
      STATION INDEXES
   ========================================================= */
 
   const startIndex = useMemo(() => {
-    return stations.findIndex(
-      (station) => station.code === startStation
-    );
+    return stations.findIndex((station) => station.code === startStation);
   }, [stations, startStation]);
 
   const endIndex = useMemo(() => {
-    return stations.findIndex(
-      (station) => station.code === endStation
-    );
+    return stations.findIndex((station) => station.code === endStation);
   }, [stations, endStation]);
 
   /* =========================================================
      END STATIONS
-
+     
      Only stations AFTER start station.
   ========================================================= */
 
@@ -351,58 +178,39 @@ const CreateTimeTable = () => {
      VALIDATION
   ========================================================= */
 
-  const stationSelectionValid =
-    startIndex !== -1 &&
-    endIndex !== -1 &&
-    startIndex < endIndex;
+  const stationSelectionValid = startIndex !== -1 && endIndex !== -1 && startIndex < endIndex;
 
-  const selectionComplete =
-    !!selectedLine &&
-    !!direction &&
-    !!selectedPattern;
+  const selectionComplete = !!selectedLine && !!direction && !!selectedPattern;
 
   /* =========================================================
      HANDLERS
   ========================================================= */
 
-  const handleLineChange = (
-    value: string | null
-  ) => {
+  const handleLineChange = (value: string | null) => {
+    dispatch(clearTrains());
     setLineId(value ?? "");
-
     setDirection("");
     setPatternName("");
-
     setStartStation("");
     setEndStation("");
   };
 
-  const handleDirectionChange = (
-    value: string | null
-  ) => {
-    const nextDirection =
-      (value ?? "") as Direction | "";
-
+  const handleDirectionChange = (value: string | null) => {
+    const nextDirection = (value ?? "") as Direction | "";
+    dispatch(clearTrains());
     setDirection(nextDirection);
-
     setPatternName("");
-
     setStartStation("");
     setEndStation("");
   };
 
-  const handlePatternChange = (
-    value: string | null
-  ) => {
+  const handlePatternChange = (value: string | null) => {
     setPatternName(value ?? "");
-
     setStartStation("");
     setEndStation("");
   };
 
-  const handleStartStationChange = (
-    value: string | null
-  ) => {
+  const handleStartStationChange = (value: string | null) => {
     setStartStation(value ?? "");
 
     /*
@@ -412,17 +220,173 @@ const CreateTimeTable = () => {
     setEndStation("");
   };
 
-  const handleEndStationChange = (
-    value: string | null
-  ) => {
+  const handleEndStationChange = (value: string | null) => {
     setEndStation(value ?? "");
   };
 
+  //RESET
+  const handleReset = () => {
+    dispatch(clearTrains());
 
+    setLineId("");
+    setDirection("");
+    setPatternName("");
+    setStartStation("");
+    setEndStation("");
 
-  const handleAddConfiguration = (newTrains: TimetableTrain[]) => {
-  setTrains((prev) => [...prev, ...newTrains]);
-};
+    setTimetableMode("count");
+    setTrainCount(5);
+    setStartTime("08:00");
+    setEndTime("12:00");
+    setFrequency("20");
+  };
+  /* =========================================================
+     GENERATE TRAIN
+  ========================================================= */
+
+  const generateTrain = (trainId: number, trainName: string, departureTime: string): TimetableTrain | null => {
+    if (!selectedPattern) {
+      toast.error("Please select a service pattern.");
+      return null;
+    }
+
+    const routeStations = stations.slice(startIndex, endIndex + 1);
+
+    let currentDeparture = departureTime;
+
+    const times = routeStations.map((station, index) => {
+      if (index === 0) {
+        const arrival = currentDeparture;
+
+        const departure = addTime(arrival, durationToSeconds(GLOBAL_HALT));
+
+        currentDeparture = departure;
+
+        return {
+          stationCode: station.code,
+          arrival,
+          departure,
+        };
+      }
+
+      const travelTimeIndex = startIndex + index - 1;
+      const travelTime = selectedPattern.travelTimes[travelTimeIndex];
+
+      if (!travelTime) {
+        toast.error(`Missing travel time for ${stations[travelTimeIndex]?.code} → ${station.code}`);
+
+        return null;
+      }
+
+      const arrival = addTime(currentDeparture, durationToSeconds(travelTime));
+
+      if (index === routeStations.length - 1) {
+        return {
+          stationCode: station.code,
+          arrival,
+          departure: null,
+        };
+      }
+
+      const departure = addTime(arrival, durationToSeconds(GLOBAL_HALT));
+
+      currentDeparture = departure;
+
+      return {
+        stationCode: station.code,
+        arrival,
+        departure,
+      };
+    });
+
+    if (times.some((time) => time === null)) {
+      return null;
+    }
+
+    return {
+      trainId,
+      trainName,
+      patternName: selectedPattern.name,
+      startStation,
+      endStation,
+      times: times as TimetableTrain["times"],
+    };
+  };
+
+  //CLEAR TRAINS
+  const handleClearTrains = () => {
+    dispatch(clearTrains());
+  };
+  const handleAddConfiguration = () => {
+    if (!stationSelectionValid) {
+      toast.error("Please select a valid station range.");
+      return;
+    }
+
+    if (!selectedPattern) {
+      toast.error("Please select a service pattern.");
+      return;
+    }
+
+    const nextTrainId = trains.length > 0 ? Math.max(...trains.map((train) => train.trainId)) + 1 : 1;
+
+    const newTrains: TimetableTrain[] = [];
+
+    if (timetableMode === "count") {
+      const count = Number(trainCount);
+      const interval = Number(frequency);
+
+      if (!count || count < 1) {
+        toast.error("Please enter a valid train count.");
+        return;
+      }
+
+      if (!interval || interval <= 0) {
+        toast.error("Please enter a valid frequency.");
+        return;
+      }
+
+      for (let i = 0; i < count; i++) {
+        const departureTime = addTime(startTime, i * interval * 60);
+
+        const train = generateTrain(nextTrainId + i, `T${nextTrainId + i}`, departureTime);
+
+        if (train) {
+          newTrains.push(train);
+        }
+      }
+    } else {
+      const interval = Number(frequency);
+
+      if (!interval || interval <= 0) {
+        toast.error("Please enter a valid frequency.");
+        return;
+      }
+
+      let currentTime = startTime;
+      let trainId = nextTrainId;
+
+      while (timeToSeconds(currentTime) <= timeToSeconds(endTime)) {
+        const train = generateTrain(trainId, `T${trainId}`, currentTime);
+
+        if (train) {
+          newTrains.push(train);
+        }
+
+        trainId++;
+        currentTime = addTime(currentTime, interval * 60);
+      }
+    }
+
+    if (newTrains.length === 0) {
+      toast.error("No trains could be generated.");
+      return;
+    }
+
+    dispatch(addTrains(newTrains));
+
+    toast.success(`${newTrains.length} train${newTrains.length > 1 ? "s" : ""} added successfully.`);
+  };
 
   /* =========================================================
      RENDER
@@ -430,21 +394,38 @@ const CreateTimeTable = () => {
 
   return (
     <div className="min-h-screen w-full bg-[#050714] px-4 py-5 text-white">
-
       {/* =====================================================
           PAGE HEADER
       ===================================================== */}
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="mb-4">
+          <h1 className="text-2xl font-semibold tracking-tight">Create Timetable</h1>
 
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Create Timetable
-        </h1>
-
-        <p className="mt-1 text-sm text-slate-400">
-          Configure the timetable and add trains.
-        </p>
+          <p className="mt-1 text-sm text-slate-400">Configure the timetable and add trains.</p>
+        </div>
+        <div className="flex items-end">
+          <button
+            type="button"
+            onClick={handleReset}
+            className="
+      h-9
+      rounded-lg
+      border border-white/10
+      bg-white/[0.03]
+      px-4
+      text-sm
+      font-medium
+      text-slate-300
+      transition
+      hover:border-red-400/30
+      hover:bg-red-400/[0.08]
+      hover:text-red-300
+    "
+          >
+            Reset
+          </button>
+        </div>
       </div>
-
       {/* =====================================================
           SELECTION
       ===================================================== */}
@@ -461,18 +442,12 @@ const CreateTimeTable = () => {
         "
       >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-
           {/* LINE */}
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-300">
-              Line
-            </label>
+            <label className="mb-1.5 block text-sm font-medium text-slate-300">Line</label>
 
-            <Select
-              value={lineId}
-              onValueChange={handleLineChange}
-            >
+            <Select value={lineId} onValueChange={handleLineChange}>
               <SelectTrigger
                 className="
                   h-10 w-full
@@ -486,11 +461,8 @@ const CreateTimeTable = () => {
               </SelectTrigger>
 
               <SelectContent>
-                {MOCK_LINES.map((line) => (
-                  <SelectItem
-                    key={line.id}
-                    value={String(line.id)}
-                  >
+                {lines.map((line) => (
+                  <SelectItem key={line.id} value={String(line.id)}>
                     {line.name}
                   </SelectItem>
                 ))}
@@ -501,15 +473,9 @@ const CreateTimeTable = () => {
           {/* DIRECTION */}
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-300">
-              Direction
-            </label>
+            <label className="mb-1.5 block text-sm font-medium text-slate-300">Direction</label>
 
-            <Select
-              value={direction}
-              onValueChange={handleDirectionChange}
-              disabled={!selectedLine}
-            >
+            <Select value={direction} onValueChange={handleDirectionChange} disabled={!selectedLine}>
               <SelectTrigger
                 className="
                   h-10 w-full
@@ -523,13 +489,8 @@ const CreateTimeTable = () => {
               </SelectTrigger>
 
               <SelectContent>
-                <SelectItem value="UP">
-                  UP
-                </SelectItem>
-
-                <SelectItem value="DOWN">
-                  DOWN
-                </SelectItem>
+                <SelectItem value="UP">UP</SelectItem>
+                <SelectItem value="DOWN">DOWN</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -537,15 +498,9 @@ const CreateTimeTable = () => {
           {/* SERVICE PATTERN */}
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-300">
-              Service Pattern
-            </label>
+            <label className="mb-1.5 block text-sm font-medium text-slate-300">Service Pattern</label>
 
-            <Select
-              value={patternName}
-              onValueChange={handlePatternChange}
-              disabled={!selectedLine || !direction}
-            >
+            <Select value={patternName} onValueChange={handlePatternChange} disabled={!selectedLine || !direction}>
               <SelectTrigger
                 className="
                   h-10 w-full
@@ -560,17 +515,13 @@ const CreateTimeTable = () => {
 
               <SelectContent>
                 {patterns.map((pattern) => (
-                  <SelectItem
-                    key={pattern.name}
-                    value={pattern.name}
-                  >
+                  <SelectItem key={pattern.name} value={pattern.name}>
                     {pattern.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-
         </div>
       </div>
 
@@ -590,36 +541,23 @@ const CreateTimeTable = () => {
           "
         >
           <div className="flex items-center justify-between gap-6">
-
             {/* TITLE */}
 
             <div className="shrink-0">
-              <h2 className="text-base font-semibold text-white">
-                Add Train Configuration
-              </h2>
+              <h2 className="text-base font-semibold text-white">Add Train Configuration</h2>
 
-              <p className="mt-0.5 text-xs text-slate-400">
-                Add trains to the timetable.
-              </p>
+              <p className="mt-0.5 text-xs text-slate-400">Add trains to the timetable.</p>
             </div>
 
             {/* CONFIGURATION */}
 
             <div className="flex flex-1 items-end justify-end gap-4">
-
               {/* START STATION */}
 
               <div>
-                <p className="mb-1.5 text-xs text-slate-400">
-                  Start Station
-                </p>
+                <p className="mb-1.5 text-xs text-slate-400">Start Station</p>
 
-                <Select
-                  value={startStation}
-                  onValueChange={
-                    handleStartStationChange
-                  }
-                >
+                <Select value={startStation} onValueChange={handleStartStationChange}>
                   <SelectTrigger
                     className="
                       h-9 w-32
@@ -634,10 +572,7 @@ const CreateTimeTable = () => {
 
                   <SelectContent>
                     {stations.map((station) => (
-                      <SelectItem
-                        key={station.id}
-                        value={station.code}
-                      >
+                      <SelectItem key={station.id} value={station.code}>
                         {station.code}
                       </SelectItem>
                     ))}
@@ -648,17 +583,9 @@ const CreateTimeTable = () => {
               {/* END STATION */}
 
               <div>
-                <p className="mb-1.5 text-xs text-slate-400">
-                  End Station
-                </p>
+                <p className="mb-1.5 text-xs text-slate-400">End Station</p>
 
-                <Select
-                  value={endStation}
-                  onValueChange={
-                    handleEndStationChange
-                  }
-                  disabled={!startStation}
-                >
+                <Select value={endStation} onValueChange={handleEndStationChange} disabled={!startStation}>
                   <SelectTrigger
                     className="
                       h-9 w-32
@@ -672,16 +599,11 @@ const CreateTimeTable = () => {
                   </SelectTrigger>
 
                   <SelectContent>
-                    {availableEndStations.map(
-                      (station) => (
-                        <SelectItem
-                          key={station.id}
-                          value={station.code}
-                        >
-                          {station.code}
-                        </SelectItem>
-                      )
-                    )}
+                    {availableEndStations.map((station) => (
+                      <SelectItem key={station.id} value={station.code}>
+                        {station.code}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -697,26 +619,17 @@ const CreateTimeTable = () => {
                     px-3
                     text-xs
                     whitespace-nowrap
-
-                    ${
-                      stationSelectionValid
-                        ? "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300"
-                        : "border-red-400/20 bg-red-400/[0.06] text-red-300"
-                    }
+                    ${stationSelectionValid ? "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300" : "border-red-400/20 bg-red-400/[0.06] text-red-300"}
                   `}
                 >
-                  {stationSelectionValid
-                    ? "✓ Valid"
-                    : "✕ Invalid"}
+                  {stationSelectionValid ? "✓ Valid" : "✕ Invalid"}
                 </div>
               )}
 
               {/* MODE */}
 
               <div>
-                <p className="mb-1.5 text-xs text-slate-400">
-                  Add timetable by
-                </p>
+                <p className="mb-1.5 text-xs text-slate-400">Add timetable by</p>
 
                 <div
                   className="
@@ -729,19 +642,7 @@ const CreateTimeTable = () => {
                   "
                 >
                   <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
-                    <input
-                      type="radio"
-                      name="timetableMode"
-                      value="count"
-                      checked={
-                        timetableMode === "count"
-                      }
-                      onChange={() =>
-                        setTimetableMode("count")
-                      }
-                      className="h-3.5 w-3.5 accent-cyan-400"
-                    />
-
+                    <input type="radio" name="timetableMode" value="count" checked={timetableMode === "count"} onChange={() => setTimetableMode("count")} className="h-3.5 w-3.5 accent-cyan-400" />
                     Number of Trains
                   </label>
 
@@ -750,15 +651,10 @@ const CreateTimeTable = () => {
                       type="radio"
                       name="timetableMode"
                       value="timeframe"
-                      checked={
-                        timetableMode === "timeframe"
-                      }
-                      onChange={() =>
-                        setTimetableMode("timeframe")
-                      }
+                      checked={timetableMode === "timeframe"}
+                      onChange={() => setTimetableMode("timeframe")}
                       className="h-3.5 w-3.5 accent-cyan-400"
                     />
-
                     Timeframe
                   </label>
                 </div>
@@ -769,19 +665,13 @@ const CreateTimeTable = () => {
               {timetableMode === "count" && (
                 <>
                   <div>
-                    <label className="mb-1 block text-xs text-slate-400">
-                      Number of Trains
-                    </label>
+                    <label className="mb-1 block text-xs text-slate-400">Number of Trains</label>
 
                     <input
                       type="number"
                       min={1}
                       value={trainCount}
-                      onChange={(e) =>
-                        setTrainCount(
-                          Number(e.target.value)
-                        )
-                      }
+                      onChange={(e) => setTrainCount(Number(e.target.value))}
                       className="
                         h-9 w-28
                         rounded-lg
@@ -796,16 +686,12 @@ const CreateTimeTable = () => {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-slate-400">
-                      Batch Start Time
-                    </label>
+                    <label className="mb-1 block text-xs text-slate-400">Batch Start Time</label>
 
                     <input
                       type="time"
                       value={startTime}
-                      onChange={(e) =>
-                        setStartTime(e.target.value)
-                      }
+                      onChange={(e) => setStartTime(e.target.value)}
                       className="
                         h-9 w-28
                         rounded-lg
@@ -820,16 +706,12 @@ const CreateTimeTable = () => {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-slate-400">
-                      Frequency
-                    </label>
+                    <label className="mb-1 block text-xs text-slate-400">Frequency</label>
 
                     <input
                       type="text"
                       value={frequency}
-                      onChange={(e) =>
-                        setFrequency(e.target.value)
-                      }
+                      onChange={(e) => setFrequency(e.target.value)}
                       placeholder="20 min"
                       className="
                         h-9 w-24
@@ -851,16 +733,12 @@ const CreateTimeTable = () => {
               {timetableMode === "timeframe" && (
                 <>
                   <div>
-                    <label className="mb-1 block text-xs text-slate-400">
-                      Start Time
-                    </label>
+                    <label className="mb-1 block text-xs text-slate-400">Start Time</label>
 
                     <input
                       type="time"
                       value={startTime}
-                      onChange={(e) =>
-                        setStartTime(e.target.value)
-                      }
+                      onChange={(e) => setStartTime(e.target.value)}
                       className="
                         h-9 w-28
                         rounded-lg
@@ -875,16 +753,12 @@ const CreateTimeTable = () => {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-slate-400">
-                      End Time
-                    </label>
+                    <label className="mb-1 block text-xs text-slate-400">End Time</label>
 
                     <input
                       type="time"
                       value={endTime}
-                      onChange={(e) =>
-                        setEndTime(e.target.value)
-                      }
+                      onChange={(e) => setEndTime(e.target.value)}
                       className="
                         h-9 w-28
                         rounded-lg
@@ -899,16 +773,12 @@ const CreateTimeTable = () => {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-slate-400">
-                      Frequency
-                    </label>
+                    <label className="mb-1 block text-xs text-slate-400">Frequency</label>
 
                     <input
                       type="text"
                       value={frequency}
-                      onChange={(e) =>
-                        setFrequency(e.target.value)
-                      }
+                      onChange={(e) => setFrequency(e.target.value)}
                       placeholder="20 min"
                       className="
                         h-9 w-24
@@ -926,11 +796,11 @@ const CreateTimeTable = () => {
               )}
 
               {/* ADD */}
-
-              <button
-                type="button"
-                disabled={!stationSelectionValid}
-                className="
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!stationSelectionValid}
+                  className="
                   h-9
                   rounded-lg
                   border border-cyan-400/30
@@ -945,10 +815,31 @@ const CreateTimeTable = () => {
                   disabled:cursor-not-allowed
                   disabled:opacity-40
                 "
-                onClick={()=>handleAddConfiguration(trains)}
-              >
-                + Add
-              </button>
+                  onClick={handleAddConfiguration}
+                >
+                  + Add
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearTrains}
+                  className="
+    h-9
+    rounded-lg
+    border border-white/10
+    bg-white/[0.03]
+    px-4
+    text-sm
+    font-medium
+    text-slate-300
+    transition
+    hover:border-red-400/30
+    hover:bg-red-400/[0.08]
+    hover:text-red-300
+  "
+                >
+                  Clear
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -969,14 +860,9 @@ const CreateTimeTable = () => {
             backdrop-blur-xl
           "
         >
-
-          {/* HEADER */}
-
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <h2 className="text-base font-semibold text-white">
-                Service Pattern
-              </h2>
+              <h2 className="text-base font-semibold text-white">Service Pattern</h2>
 
               <p className="mt-0.5 text-xs text-slate-400">
                 {selectedPattern?.name} · {direction}
@@ -984,54 +870,24 @@ const CreateTimeTable = () => {
             </div>
 
             <div className="text-xs text-slate-500">
-              Global halt:{" "}
-              <span className="text-slate-300">
-                {GLOBAL_HALT}
-              </span>
+              Global halt: <span className="text-slate-300">{GLOBAL_HALT}</span>
             </div>
           </div>
 
-          {/* =================================================
-              GRAPH
-
-              IMPORTANT:
-              - Fixed station height
-              - Labels absolutely positioned
-              - Travel line at exact 50%
-              - Travel time text centered
-              - Arrow remains on travel-time section
-          ================================================= */}
-
           <div className="w-full overflow-x-auto pb-3">
             <div className="flex min-w-max items-center px-2">
-
               {stations.map((station, index) => {
-                const isStart =
-                  index === startIndex;
+                const isStart = index === startIndex;
+                const isEnd = index === endIndex;
 
-                const isEnd =
-                  index === endIndex;
+                const isSelected = stationSelectionValid && index >= startIndex && index <= endIndex;
 
-                const isSelected =
-                  stationSelectionValid &&
-                  index >= startIndex &&
-                  index <= endIndex;
+                const isTravelSelected = stationSelectionValid && index >= startIndex && index < endIndex;
 
-                const isTravelSelected =
-                  stationSelectionValid &&
-                  index >= startIndex &&
-                  index < endIndex;
-
-                const travelTime =
-                  selectedPattern?.travelTimes[index];
+                const travelTime = selectedPattern?.travelTimes[index];
 
                 return (
                   <React.Fragment key={station.id}>
-
-                    {/* =========================================
-                        STATION
-                    ========================================= */}
-
                     <div
                       className="
                         relative
@@ -1043,8 +899,6 @@ const CreateTimeTable = () => {
                         justify-center
                       "
                     >
-                      {/* STATION RECTANGLE */}
-
                       <div
                         className={`
                           relative
@@ -1058,32 +912,13 @@ const CreateTimeTable = () => {
                           border
                           transition-all
                           duration-300
-
-                          ${
-                            isSelected
-                              ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.35)]"
-                              : "border-white/10 bg-white/[0.035] text-slate-300"
-                          }
-
-                          ${
-                            isStart
-                              ? "border-emerald-400/80 bg-emerald-400/10 text-emerald-200 shadow-[0_0_22px_rgba(52,211,153,0.45)]"
-                              : ""
-                          }
-
-                          ${
-                            isEnd
-                              ? "border-violet-400/80 bg-violet-400/10 text-violet-200 shadow-[0_0_22px_rgba(167,139,250,0.45)]"
-                              : ""
-                          }
+                          ${isSelected ? "border-cyan-400/70 bg-cyan-400/10 text-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.35)]" : "border-white/10 bg-white/[0.035] text-slate-300"}
+                          ${isStart ? "border-emerald-400/80 bg-emerald-400/10 text-emerald-200 shadow-[0_0_22px_rgba(52,211,153,0.45)]" : ""}
+                          ${isEnd ? "border-violet-400/80 bg-violet-400/10 text-violet-200 shadow-[0_0_22px_rgba(167,139,250,0.45)]" : ""}
                         `}
                       >
-                        <span className="text-sm font-semibold leading-none">
-                          {station.code}
-                        </span>
+                        <span className="text-sm font-semibold leading-none">{station.code}</span>
                       </div>
-
-                      {/* START LABEL */}
 
                       {isStart && (
                         <span
@@ -1104,8 +939,6 @@ const CreateTimeTable = () => {
                           START
                         </span>
                       )}
-
-                      {/* END LABEL */}
 
                       {isEnd && (
                         <span
@@ -1128,14 +961,6 @@ const CreateTimeTable = () => {
                       )}
                     </div>
 
-                    {/* =========================================
-                        TRAVEL TIME
-
-                        The entire connector has fixed height.
-                        Therefore station text can never move
-                        the line vertically.
-                    ========================================= */}
-
                     {index < stations.length - 1 && (
                       <div
                         className="
@@ -1147,9 +972,6 @@ const CreateTimeTable = () => {
                           items-center
                         "
                       >
-
-                        {/* LINE */}
-
                         <div
                           className={`
                             absolute
@@ -1160,16 +982,9 @@ const CreateTimeTable = () => {
                             -translate-y-1/2
                             transition-all
                             duration-300
-
-                            ${
-                              isTravelSelected
-                                ? "bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"
-                                : "bg-cyan-400/20"
-                            }
+                            ${isTravelSelected ? "bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" : "bg-cyan-400/20"}
                           `}
                         />
-
-                        {/* TRAVEL TIME */}
 
                         {travelTime && (
                           <span
@@ -1186,21 +1001,12 @@ const CreateTimeTable = () => {
                               text-[11px]
                               font-semibold
                               leading-none
-
-                              ${
-                                isTravelSelected
-                                  ? "bg-[#050714] text-cyan-300"
-                                  : "bg-[#050714] text-slate-500"
-                              }
+                              ${isTravelSelected ? "bg-[#050714] text-cyan-300" : "bg-[#050714] text-slate-500"}
                             `}
                           >
-                            {formatTravelTime(
-                              travelTime
-                            )}
+                            {formatTravelTime(travelTime)}
                           </span>
                         )}
-
-                        {/* DIRECTION ARROW */}
 
                         <div
                           className={`
@@ -1209,19 +1015,12 @@ const CreateTimeTable = () => {
                             top-1/2
                             z-20
                             -translate-y-1/2
-
                             h-0
                             w-0
-
                             border-y-[4px]
                             border-l-[6px]
                             border-y-transparent
-
-                            ${
-                              isTravelSelected
-                                ? "border-l-cyan-400"
-                                : "border-l-cyan-400/30"
-                            }
+                            ${isTravelSelected ? (LINE_ARROW_COLORS[lineId] ?? "border-l-cyan-400") : "border-l-cyan-400/30"}
                           `}
                         />
                       </div>
@@ -1245,24 +1044,12 @@ const CreateTimeTable = () => {
                 px-3
                 py-2
                 text-xs
-
-                ${
-                  stationSelectionValid
-                    ? "border-cyan-400/15 bg-cyan-400/[0.04] text-cyan-300"
-                    : "border-red-400/20 bg-red-400/[0.04] text-red-300"
-                }
+                ${stationSelectionValid ? "border-cyan-400/15 bg-cyan-400/[0.04] text-cyan-300" : "border-red-400/20 bg-red-400/[0.04] text-red-300"}
               `}
             >
               {stationSelectionValid ? (
                 <>
-                  Service runs from{" "}
-                  <span className="font-semibold">
-                    {startStation}
-                  </span>{" "}
-                  →{" "}
-                  <span className="font-semibold">
-                    {endStation}
-                  </span>
+                  Service runs from <span className="font-semibold">{startStation}</span> → <span className="font-semibold">{endStation}</span>
                 </>
               ) : (
                 "Invalid station sequence. End station must follow the start station."
@@ -1273,49 +1060,10 @@ const CreateTimeTable = () => {
       )}
 
       {/* =====================================================
-          DEBUG / CURRENT CONFIGURATION
-          Remove later when timetable grid is implemented.
+          TIMETABLE GRID
       ===================================================== */}
 
-      {selectionComplete &&
-        stationSelectionValid && (
-          <div
-            className="
-              mt-3
-              hidden
-              rounded-xl
-              border border-white/10
-              bg-white/[0.025]
-              p-4
-              text-xs
-              text-slate-400
-            "
-          >
-            <div>
-              Line: {selectedLine?.name}
-            </div>
-
-            <div>
-              Direction: {direction}
-            </div>
-
-            <div>
-              Pattern: {selectedPattern?.name}
-            </div>
-
-            <div>
-              Start: {startStation}
-            </div>
-
-            <div>
-              End: {endStation}
-            </div>
-
-            <div>
-              Mode: {timetableMode}
-            </div>
-          </div>
-        )}
+      <TimeTableGrid stations={stations} trains={trains} />
     </div>
   );
 };

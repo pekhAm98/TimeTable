@@ -21,6 +21,15 @@ const LINE_ARROW_COLORS: Record<string, string> = {
   "5": "border-l-pink-400",
   "6": "border-l-orange-400",
 };
+
+const LINE_COLORS: Record<string, string> = {
+  "1": "#60a5fa", // blue-400
+  "2": "#4ade80", // green-400
+  "3": "#c084fc", // purple-400
+  "4": "#facc15", // yellow-400
+  "5": "#f472b6", // pink-400
+  "6": "#fb923c", // orange-400
+};
 const LINE_LABELS: Record<number, string> = {
   1: "Blue Line",
   2: "Green Line",
@@ -36,6 +45,6 @@ const RUN_DAY_LABELS: Record<number, string> = {
   4: "Sunday",
 };
 
-export { LINE_LABELS, RUN_DAY_LABELS , LINE_ARROW_COLORS};
+export { LINE_LABELS, RUN_DAY_LABELS , LINE_ARROW_COLORS, LINE_COLORS};
 
 

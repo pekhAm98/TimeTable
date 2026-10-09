@@ -8,10 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 import { useDispatch, useSelector } from "react-redux";
 import type { RootState, AppDispatch } from "@/store";
-import { addTrains, clearTrains } from "@/store/timetableSlice";
+import { addTrains, clearTrains, updateNamingConfig, resetNamingConfig } from "@/store/timetableSlice";
 import { GLOBAL_HALT } from "@/constants/variables";
 import { toast } from "sonner";
-
+import { useEffect } from "react";
 import { useGetAllLinesQuery, useGetLineStationsQuery, useGetServicePatternsQuery } from "@/store/api/timetableApi";
 
 /* =========================================================
@@ -77,7 +77,6 @@ const secondsToTime = (totalSeconds: number) => {
   const secondsInDay = 24 * 60 * 60;
 
   const normalizedSeconds = ((totalSeconds % secondsInDay) + secondsInDay) % secondsInDay;
-
   const hours = Math.floor(normalizedSeconds / 3600);
   const minutes = Math.floor((normalizedSeconds % 3600) / 60);
   const seconds = normalizedSeconds % 60;
@@ -123,8 +122,9 @@ const CreateTimeTable = () => {
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("12:00");
   const [frequency, setFrequency] = useState("20");
-
   const trains = useSelector((state: RootState) => state.timetable.trains);
+
+  const namingConfig = useSelector((state: RootState) => state.timetable.namingConfig);
 
   const dispatch = useDispatch<AppDispatch>();
 
@@ -225,21 +225,22 @@ const CreateTimeTable = () => {
   };
 
   //RESET
-  const handleReset = () => {
-    dispatch(clearTrains());
+ const handleReset = () => {
+  dispatch(clearTrains());
 
-    setLineId("");
-    setDirection("");
-    setPatternName("");
-    setStartStation("");
-    setEndStation("");
+  setLineId("");
+  setDirection("");
+  setPatternName("");
+  setStartStation("");
+  setEndStation("");
 
-    setTimetableMode("count");
-    setTrainCount(5);
-    setStartTime("08:00");
-    setEndTime("12:00");
-    setFrequency("20");
-  };
+  setTimetableMode("count");
+  setTrainCount(5);
+  setStartTime("08:00");
+  setEndTime("12:00");
+  setFrequency("20");
+};
+
   /* =========================================================
      GENERATE TRAIN
   ========================================================= */
@@ -318,79 +319,103 @@ const CreateTimeTable = () => {
     dispatch(clearTrains());
   };
   const handleAddConfiguration = () => {
-    if (!stationSelectionValid) {
-      toast.error("Please select a valid station range.");
+  if (!stationSelectionValid) {
+    toast.error("Please select a valid station range.");
+    return;
+  }
+
+  if (!selectedPattern) {
+    toast.error("Please select a service pattern.");
+    return;
+  }
+
+  const nextTrainId =
+    trains.length > 0
+      ? Math.max(...trains.map((train) => train.trainId)) + 1
+      : 1;
+
+  const newTrains: TimetableTrain[] = [];
+
+  if (timetableMode === "count") {
+    const count = Number(trainCount);
+    const interval = Number(frequency);
+
+    if (!count || count < 1) {
+      toast.error("Please enter a valid train count.");
       return;
     }
 
-    if (!selectedPattern) {
-      toast.error("Please select a service pattern.");
+    if (!interval || interval <= 0) {
+      toast.error("Please enter a valid frequency.");
       return;
     }
 
-    const nextTrainId = trains.length > 0 ? Math.max(...trains.map((train) => train.trainId)) + 1 : 1;
+    let sequence = namingConfig.nextSequence;
 
-    const newTrains: TimetableTrain[] = [];
+    for (let i = 0; i < count; i++) {
+      const departureTime = addTime(startTime, i * interval * 60);
 
-    if (timetableMode === "count") {
-      const count = Number(trainCount);
-      const interval = Number(frequency);
+      const trainName = `${namingConfig.prefix.trim()}-${String(sequence).padStart(3, "0")}`;
 
-      if (!count || count < 1) {
-        toast.error("Please enter a valid train count.");
-        return;
-      }
+      const train = generateTrain(
+        nextTrainId + i,
+        trainName,
+        departureTime
+      );
 
-      if (!interval || interval <= 0) {
-        toast.error("Please enter a valid frequency.");
-        return;
-      }
-
-      for (let i = 0; i < count; i++) {
-        const departureTime = addTime(startTime, i * interval * 60);
-
-        const train = generateTrain(nextTrainId + i, `T${nextTrainId + i}`, departureTime);
-
-        if (train) {
-          newTrains.push(train);
-        }
-      }
-    } else {
-      const interval = Number(frequency);
-
-      if (!interval || interval <= 0) {
-        toast.error("Please enter a valid frequency.");
-        return;
-      }
-
-      let currentTime = startTime;
-      let trainId = nextTrainId;
-
-      while (timeToSeconds(currentTime) <= timeToSeconds(endTime)) {
-        const train = generateTrain(trainId, `T${trainId}`, currentTime);
-
-        if (train) {
-          newTrains.push(train);
-        }
-
-        trainId++;
-        currentTime = addTime(currentTime, interval * 60);
+      if (train) {
+        newTrains.push(train);
+        sequence += namingConfig.increment;
       }
     }
+  } else {
+    const interval = Number(frequency);
 
-    if (newTrains.length === 0) {
-      toast.error("No trains could be generated.");
+    if (!interval || interval <= 0) {
+      toast.error("Please enter a valid frequency.");
       return;
     }
 
-    dispatch(addTrains(newTrains));
+    let currentTime = startTime;
+    let trainId = nextTrainId;
+    let sequence = namingConfig.nextSequence;
 
-    toast.success(`${newTrains.length} train${newTrains.length > 1 ? "s" : ""} added successfully.`);
-  };
+    while (timeToSeconds(currentTime) <= timeToSeconds(endTime)) {
+      const trainName = `${namingConfig.prefix.trim()}-${String(sequence).padStart(3, "0")}`;
+
+      const train = generateTrain(trainId, trainName, currentTime);
+
+      if (train) {
+        newTrains.push(train);
+        sequence += namingConfig.increment;
+      }
+
+      trainId++;
+      currentTime = addTime(currentTime, interval * 60);
+    }
+  }
+
+  if (newTrains.length === 0) {
+    toast.error("No trains could be generated.");
+    return;
+  }
+
+  dispatch(addTrains(newTrains));
+
+  toast.success(
+    `${newTrains.length} train${newTrains.length > 1 ? "s" : ""} added successfully.`
+  );
+};
 
   /* =========================================================
      RENDER
   ========================================================= */
+
+
+
+  useEffect(() => {
+  dispatch(clearTrains());
+}, [dispatch]);
 
   return (
     <div className="min-h-screen w-full bg-[#050714] px-4 py-5 text-white">
@@ -540,11 +565,103 @@ const CreateTimeTable = () => {
             backdrop-blur-xl
           "
         >
+          {/* TRAIN NAMING CONFIGURATION */}
+          <div className="rounded-2xl border border-cyan-400/15 bg-slate-900/70 p-5 shadow-[0_0_30px_rgba(34,211,238,0.04)]">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-semibold text-white">Train Naming Configuration</h3>
+                <p className="mt-1 text-sm text-slate-400">Configure how train names are generated</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => dispatch(resetNamingConfig())}
+                className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:bg-white/[0.07]"
+              >
+                Reset to Default
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {/* PREFIX */}
+              <div>
+                <label className="mb-2 block text-sm text-slate-300">Train Prefix</label>
+                <input
+                  type="text"
+                  value={namingConfig.prefix}
+                  onChange={(e) => dispatch(updateNamingConfig({ prefix: e.target.value }))}
+                  placeholder="TRAIN"
+                  className="h-10 w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none transition focus:border-cyan-400/50"
+                />
+                <p className="mt-1.5 text-xs text-slate-500">Prefix for generated train names</p>
+              </div>
+
+              {/* NEXT SEQUENCE */}
+              <div>
+                <label className="mb-2 block text-sm text-slate-300">Next Sequence Number</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={namingConfig.nextSequence}
+                  onChange={(e) =>
+                    dispatch(
+                      updateNamingConfig({
+                        nextSequence: Math.max(1, Number(e.target.value) || 1),
+                      }),
+                    )
+                  }
+                  className="h-10 w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none transition focus:border-cyan-400/50"
+                />
+                <p className="mt-1.5 text-xs text-slate-500">Starting number for the next train</p>
+              </div>
+
+              {/* INCREMENT */}
+              <div>
+                <label className="mb-2 block text-sm text-slate-300">Sequence Increment</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={namingConfig.increment}
+                  onChange={(e) =>
+                    dispatch(
+                      updateNamingConfig({
+                        increment: Math.max(1, Number(e.target.value) || 1),
+                      }),
+                    )
+                  }
+                  className="h-10 w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none transition focus:border-cyan-400/50"
+                />
+                <p className="mt-1.5 text-xs text-slate-500">Number added for each new train</p>
+              </div>
+            </div>
+
+            {/* LIVE PREVIEW */}
+            <div className="mt-5 rounded-xl border border-cyan-400/15 bg-cyan-400/[0.04] p-4">
+              <p className="mb-3 text-sm font-medium text-cyan-300">Preview Generated Names</p>
+
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: 5 }, (_, index) => {
+                  const sequence = namingConfig.nextSequence + index * namingConfig.increment;
+
+                  const name = `${namingConfig.prefix.trim()}-${String(sequence).padStart(3, "0")}`;
+
+                  return (
+                    <span key={index} className="rounded-full border border-cyan-400/15 bg-cyan-400/[0.05] px-3 py-1.5 text-xs font-medium text-cyan-200">
+                      {name}
+                    </span>
+                  );
+                })}
+                <span className="px-2 py-1.5 text-xs text-slate-500">…</span>
+              </div>
+            </div>
+          </div>
+          {/* TRAIN SERVICE CONFIGURATION */}
+          <div className="mt-4 rounded-2xl border border-violet-400/15 bg-gradient-to-br from-violet-950/30 via-slate-900/80 to-indigo-950/20 p-5 shadow-[0_0_30px_rgba(139,92,246,0.06)] backdrop-blur-xl">
           <div className="flex items-center justify-between gap-6">
             {/* TITLE */}
 
             <div className="shrink-0">
-              <h2 className="text-base font-semibold text-white">Add Train Configuration</h2>
+              <h2 className="text-base font-semibold text-white">Train Service Configuration</h2>
 
               <p className="mt-0.5 text-xs text-slate-400">Add trains to the timetable.</p>
             </div>
@@ -552,6 +669,8 @@ const CreateTimeTable = () => {
             {/* CONFIGURATION */}
 
             <div className="flex flex-1 items-end justify-end gap-4">
+              {/*TRAIN NAME*/}
+
               {/* START STATION */}
 
               <div>
@@ -841,6 +960,7 @@ const CreateTimeTable = () => {
                 </button>
               </div>
             </div>
+          </div>
           </div>
         </div>
       )}

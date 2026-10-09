@@ -37,11 +37,40 @@ type RawServicePattern = {
   TRAVEL_TIMES: string[];
 };
 
-type ServicePattern = {
+export type ServicePattern = {
+  id: number;
+  lineId: number;
   name: string;
   direction: Direction;
   travelTimes: string[];
 };
+
+type ServicePatternMutationResponse = {
+  success?: boolean;
+  message: string;
+};
+
+type CreateServicePatternPayload = {
+  lineId: number;
+  direction: Direction;
+  serviceName: string;
+  TRAVEL_TIMES: string[];
+};
+
+type UpdateServicePatternPayload = {
+  lineId: number;
+  direction: Direction;
+  serviceNameOld: string;
+  serviceNameNew: string;
+  TRAVEL_TIMES: string[];
+};
+
+type DeleteServicePatternPayload = {
+  lineId: number;
+  direction: Direction;
+  patternName: string;
+};
+
 type PreviewSummary = {
   upload_id: number;
   upload_name: string;
@@ -335,8 +364,8 @@ export const timetableApi = api.injectEndpoints({
       providesTags: ["TimetableLines"],
     }),
 
-    getLineStations: builder.query<Station[],{lineId: number;direction: Direction}>({
-        query: ({ lineId, direction }) => ({
+    getLineStations: builder.query<Station[], { lineId: number; direction: Direction }>({
+      query: ({ lineId, direction }) => ({
         url: `/timetables/lines/${lineId}/stations`,
         params: {
           direction,
@@ -349,30 +378,87 @@ export const timetableApi = api.injectEndpoints({
           id: station.STATION_ID,
         }));
       },
-      providesTags: ["TimetableStations"]
+      providesTags: ["TimetableStations"],
     }),
+    
+getServicePatterns: builder.query<
+  ServicePattern[],
+  { lineId: number; direction: Direction }
+>({
+  query: ({ lineId, direction }) => ({
+    url: `/timetables/lines/${lineId}/patterns`,
+    params: { direction },
+  }),
 
-    getServicePatterns: builder.query<ServicePattern[],
-      {
-        lineId: number;
-        direction: Direction;}
-    >({
-      query: ({ lineId, direction }) => ({
-        url: `/timetables/lines/${lineId}/patterns`,
-        params: {
-          direction,
-        },
-      }),
+  transformResponse: (response: RawServicePattern[]) =>
+    response.map((pattern) => ({
+      id: pattern.PATTERN_ID,
+      lineId: pattern.LINE_ID,
+      name: pattern.PATTERN_NAME,
+      direction: pattern.DIRECTION,
+      travelTimes: pattern.TRAVEL_TIMES,
+    })),
 
-      transformResponse: (response: RawServicePattern[]) => {
-        return response.map((pattern) => ({
-          name: pattern.PATTERN_NAME,
-          direction: pattern.DIRECTION,
-          travelTimes: pattern.TRAVEL_TIMES,
-        }));
-      },
-          providesTags: ["ServicePatterns"]
-    }),
+  providesTags: (result) => [
+    { type: "ServicePatterns" as const, id: "LIST" },
+    ...(result ?? []).map((pattern) => ({
+      type: "ServicePatterns" as const,
+      id: pattern.id,
+    })),
+  ],
+}),
+
+createServicePattern: builder.mutation<
+  ServicePatternMutationResponse,
+  CreateServicePatternPayload
+>({
+  query: ({ lineId, ...body }) => ({
+    url: `/timetables/lines/${lineId}/patterns`,
+    method: "POST",
+    body,
+  }),
+
+  invalidatesTags: (result, error, { lineId, direction }) => [
+    { type: "ServicePatterns", id: "LIST" },
+    { type: "ServicePatterns", id: `${lineId}-${direction}` },
+  ],
+}),
+
+updateServicePattern: builder.mutation<
+  ServicePatternMutationResponse,
+  UpdateServicePatternPayload
+>({
+  query: ({ lineId, ...body }) => ({
+    url: `/timetables/lines/${lineId}/patterns`,
+    method: "PUT",
+    body,
+  }),
+
+  invalidatesTags: (result, error, { lineId, direction }) => [
+    { type: "ServicePatterns", id: "LIST" },
+    { type: "ServicePatterns", id: `${lineId}-${direction}` },
+  ],
+}),
+
+deleteServicePattern: builder.mutation<
+  ServicePatternMutationResponse,
+  DeleteServicePatternPayload
+>({
+  query: ({ lineId, ...body }) => ({
+    url: `/timetables/lines/${lineId}/patterns`,
+    method: "DELETE",
+    body,
+  }),
+
+  invalidatesTags: (result, error, { lineId, direction }) => [
+    { type: "ServicePatterns", id: "LIST" },
+    { type: "ServicePatterns", id: `${lineId}-${direction}` },
+  ],
+}),
+
+
+
+
   }),
 });
 
@@ -388,5 +474,8 @@ export const {
   //CREATION
   useGetAllLinesQuery,
   useGetLineStationsQuery,
-  useGetServicePatternsQuery
+  useGetServicePatternsQuery,
+  useCreateServicePatternMutation,
+  useUpdateServicePatternMutation,
+  useDeleteServicePatternMutation,
 } = timetableApi;
